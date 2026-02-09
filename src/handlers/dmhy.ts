@@ -135,7 +135,16 @@ export class DmhyListHandler {
       if (CONFIG.bangumi.apiKey) {
         const bgmResult = await bangumiService.search(cleanTitle);
 
-        const bgmLog = { ...bgmResult.meta, response: bgmResult.data || bgmResult.meta.error || 'No Result' };
+        // 构建包含 URL 的日志数据
+        const bgmLog = {
+          meta: {
+            method: 'POST',
+            url: `${CONFIG.bangumi.baseUrl}/search/subjects`,
+            body: { keyword: cleanTitle, filter: { type: [2] } },
+            ...bgmResult.meta
+          },
+          response: bgmResult.data || bgmResult.meta.error || 'No Result'
+        };
         log('【请求API: Bangumi】', bgmLog);
 
         const bgmSubject = bgmResult.data;
@@ -296,7 +305,9 @@ export class DmhyListHandler {
     title = title.replace(/[|／_]/g, '/');
     const techKeywords = /(?:1080p|720p|2160p|4k|web|bdrip|avc|hevc|aac|mp4|mkv|big5|chs|cht|jpn|eng|s\d+|season|fin|opus|x264|x265|10bit|tv动画|剧场版|ova|cd|others)/gi;
     title = title.replace(techKeywords, ' ');
-    title = title.replace(/第\s*\d+(\-\d+)?\s*[话集季]/g, ' ');
+    // 清理中文季/话/集/期标记，包括 "第3期", "第一季", "Season 3" 等
+    title = title.replace(/第\s*[\d一二三四五六七八九十]+\s*[话集季期部]/g, ' ');
+    title = title.replace(/Season\s*\d+/gi, ' ');
     title = title.replace(/\s\d+-\d+/g, ' ');
     title = title.replace(/\[\d+(?:-\d+)?\]/g, ' ');
 

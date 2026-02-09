@@ -476,13 +476,16 @@ export const UI = {
 
     // --- Search Links (Only if not found or explicit request) ---
     let actionsHtml = '';
-    if (!embyItem) {
-      searchQueries.forEach(q => {
-        if (!q) return;
-        actionsHtml += `<a href="https://www.gyg.si/s/1---1/${encodeURIComponent(q)}" target="_blank" class="us-btn us-btn-search">Search GYG</a>`;
-        actionsHtml += `<a href="https://bt4gprx.com/search?orderby=size&p=1&q=${encodeURIComponent(q)}" target="_blank" class="us-btn us-btn-search">Search BT4G</a>`;
-        actionsHtml += `<a href="https://dmhy.org/topics/list?keyword=${encodeURIComponent(q)}&sort_id=2&team_id=0&order=date-desc" target="_blank" class="us-btn us-btn-search">DMHY 搜全集</a>`;
-      });
+    if (!embyItem && searchQueries.length > 0) {
+      // 使用去重后的第一个有效查询词
+      const uniqueQueries = [...new Set(searchQueries.filter(q => q && q.trim()))];
+      const primaryQuery = uniqueQueries[0] || '';
+
+      if (primaryQuery) {
+        actionsHtml += `<a href="https://www.gyg.si/s/1---1/${encodeURIComponent(primaryQuery)}" target="_blank" class="us-btn us-btn-search">Search GYG</a>`;
+        actionsHtml += `<a href="https://bt4gprx.com/search?orderby=size&p=1&q=${encodeURIComponent(primaryQuery)}" target="_blank" class="us-btn us-btn-search">Search BT4G</a>`;
+        actionsHtml += `<a href="https://dmhy.org/topics/list?keyword=${encodeURIComponent(primaryQuery)}&sort_id=2&team_id=0&order=date-desc" target="_blank" class="us-btn us-btn-search">DMHY 搜全集</a>`;
+      }
     }
 
 
