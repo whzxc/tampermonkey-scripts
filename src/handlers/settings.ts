@@ -1,11 +1,13 @@
 import { Cache } from '../utils';
 
 export class SettingsHandler {
+  private id: string;
+
   constructor() {
     this.id = 'us-settings-overlay';
   }
 
-  showPanel() {
+  showPanel(): void {
     if (document.getElementById(this.id)) return;
 
     const overlay = document.createElement('div');
@@ -55,22 +57,22 @@ export class SettingsHandler {
     document.body.appendChild(overlay);
 
     // Set default value for Dot Position
-    document.getElementById('us-dot-pos').value = GM_getValue('us_dot_position', 'auto');
+    (document.getElementById('us-dot-pos') as HTMLSelectElement).value = GM_getValue('us_dot_position', 'auto');
 
-    document.getElementById('us-btn-cancel').onclick = () => this.close();
-    document.getElementById('us-btn-save').onclick = () => {
+    (document.getElementById('us-btn-cancel') as HTMLButtonElement).onclick = () => this.close();
+    (document.getElementById('us-btn-save') as HTMLButtonElement).onclick = () => {
       // Save Dot Position
-      const dotPos = document.getElementById('us-dot-pos').value;
+      const dotPos = (document.getElementById('us-dot-pos') as HTMLSelectElement).value;
       GM_setValue('us_dot_position', dotPos);
       this.save();
     };
   }
 
-  save() {
-    const tmdbKey = document.getElementById('us-tmdb-key').value.trim();
-    const embyServer = document.getElementById('us-emby-server').value.trim().replace(/\/$/, '');
-    const embyKey = document.getElementById('us-emby-key').value.trim();
-    const bangumiToken = document.getElementById('us-bangumi-token').value.trim();
+  save(): void {
+    const tmdbKey = (document.getElementById('us-tmdb-key') as HTMLInputElement).value.trim();
+    const embyServer = (document.getElementById('us-emby-server') as HTMLInputElement).value.trim().replace(/\/$/, '');
+    const embyKey = (document.getElementById('us-emby-key') as HTMLInputElement).value.trim();
+    const bangumiToken = (document.getElementById('us-bangumi-token') as HTMLInputElement).value.trim();
 
     GM_setValue('tmdb_api_key', tmdbKey);
     GM_setValue('emby_server', embyServer);
@@ -82,7 +84,7 @@ export class SettingsHandler {
     location.reload();
   }
 
-  close() {
+  close(): void {
     const el = document.getElementById(this.id);
     if (el) el.remove();
   }
@@ -90,11 +92,13 @@ export class SettingsHandler {
 
 
 export class CacheHandler {
+  private id: string;
+
   constructor() {
     this.id = 'us-cache-overlay';
   }
 
-  showPanel() {
+  showPanel(): void {
     if (document.getElementById(this.id)) return;
 
     const overlay = document.createElement('div');
@@ -124,23 +128,23 @@ export class CacheHandler {
 
     document.body.appendChild(overlay);
 
-    document.getElementById('us-btn-close-cache').onclick = () => this.close();
+    (document.getElementById('us-btn-close-cache') as HTMLButtonElement).onclick = () => this.close();
 
-    document.getElementById('us-btn-do-clear').onclick = () => {
-      const filters = [];
-      if (document.getElementById('us-cache-emby').checked) filters.push('emby');
-      if (document.getElementById('us-cache-tmdb').checked) filters.push('tmdb');
-      if (document.getElementById('us-cache-imdb').checked) filters.push('imdb');
+    (document.getElementById('us-btn-do-clear') as HTMLButtonElement).onclick = () => {
+      const filters: string[] = [];
+      if ((document.getElementById('us-cache-emby') as HTMLInputElement).checked) filters.push('emby');
+      if ((document.getElementById('us-cache-tmdb') as HTMLInputElement).checked) filters.push('tmdb');
+      if ((document.getElementById('us-cache-imdb') as HTMLInputElement).checked) filters.push('imdb');
 
       const count = Cache.clear(filters);
-      const msg = document.getElementById('us-cache-msg');
+      const msg = document.getElementById('us-cache-msg') as HTMLElement;
       msg.textContent = `Cleared ${count} items.`;
       msg.style.opacity = '1';
       setTimeout(() => msg.style.opacity = '0', 3000);
     };
   }
 
-  close() {
+  close(): void {
     const el = document.getElementById(this.id);
     if (el) el.remove();
   }

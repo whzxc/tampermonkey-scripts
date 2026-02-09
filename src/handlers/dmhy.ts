@@ -1,12 +1,27 @@
 import { Utils } from '../utils';
 import { UI } from '../utils/ui';
-import { CONFIG } from '../config';
-import { TmdbService } from '../services/tmdb';
-import { EmbyService } from '../services/emby';
-import { BangumiService } from '../services/bangumi';
+import { CONFIG } from '../core/api-config';
+import { tmdbService, TmdbSearchResult } from '../services/tmdb';
+import { embyService, EmbyItem } from '../services/emby';
+import { bangumiService } from '../services/bangumi';
+
+interface ParsedTitle {
+  title: string;
+  group: string;
+  res: string;
+  sub: string;
+  fmt: string;
+}
+
+interface LogEntry {
+  time: string;
+  step: string;
+  data: unknown;
+  status?: string;
+}
 
 export class DmhyListHandler {
-  init() {
+  init(): void {
     Utils.log('Initializing DMHY List Handler');
     UI.init();
     Utils.addStyle(`
@@ -30,7 +45,7 @@ export class DmhyListHandler {
     this.processRows();
   }
 
-  processRows() {
+  processRows(): void {
     // DMHY table selector assumption: id="topic_list" > tbody > tr
     const rows = document.querySelectorAll('table#topic_list tbody tr');
     Utils.log(`DMHY: Found ${rows.length} rows`);
@@ -40,19 +55,19 @@ export class DmhyListHandler {
       if (!titleLink) return;
 
       // Avoid reprocessing
-      if (tr.dataset.usChecked) return;
-      tr.dataset.usChecked = 'true';
+      if ((tr as HTMLElement).dataset.usChecked) return;
+      (tr as HTMLElement).dataset.usChecked = 'true';
 
-      this.checkRow(tr, titleLink);
+      this.checkRow(tr as HTMLElement, titleLink as HTMLAnchorElement);
     });
   }
 
-  async checkRow(tr, link) {
-    const rawTitle = link.textContent.trim();
+  async checkRow(tr: HTMLElement, link: HTMLAnchorElement): Promise<void> {
+    const rawTitle = link.textContent?.trim() || '';
 
     // Process Log Record
-    const processLog = [];
-    const log = (step, data) => {
+    const processLog: LogEntry[] = [];
+    const log = (step: string, data: unknown): void => {
       processLog.push({ time: new Date().toLocaleTimeString(), step, data });
     };
 
@@ -74,13 +89,13 @@ export class DmhyListHandler {
     // 'auto' mode will default to 'title_left'.
     const dot = UI.createDot({ titleElement: link });
 
-    const updateDot = (status, titleOverride) => {
+    const updateDot = (status: string, titleOverride?: string): void => {
       dot.className = `us-dot ${status}`;
-      dot.title = titleOverride || dot.title;
+      if (titleOverride) dot.title = titleOverride;
     };
 
     // Default Click: Show Modal
-    dot.onclick = (e) => {
+    dot.onclick = (e: MouseEvent): void => {
       e.preventDefault();
       e.stopPropagation();
       UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle]);
@@ -90,7 +105,7 @@ export class DmhyListHandler {
     if (cleanTitle) {
       link.innerHTML = ''; // Clear content
 
-      const addTag = (text, type, prepend = false) => {
+      const addTag = (text: string, type: string, prepend = false): void => {
         if (!text) return;
         const span = document.createElement('span');
         span.className = `us-tag us-tag-${type}`;
@@ -112,48 +127,54 @@ export class DmhyListHandler {
 
     try {
       let searchTitle = cleanTitle;
-      let mediaType = 'tv'; // Default type
+      let mediaType: 'movie' | 'tv' = 'tv'; // Default type
 
 
 
       // Step 2: Bangumi
-      if (CONFIG.bangumi.token) {
-        const bgmResult = await BangumiService.search(cleanTitle);
+      if (CONFIG.bangumi.apiKey) {
+        const bgmResult = await bangumiService.search(cleanTitle);
 
-        let bgmLog = { ...bgmResult.meta, response: bgmResult.data || bgmResult.error || 'No Result' };
+        const bgmLog = { ...bgmResult.meta, response: bgmResult.data || bgmResult.meta.error || 'No Result' };
         log('【请求API: Bangumi】', bgmLog);
 
         const bgmSubject = bgmResult.data;
         if (bgmSubject) {
           searchTitle = bgmSubject.name_cn || bgmSubject.name;
           // Detect Media Type (Movie vs TV)
-          if (bgmSubject.eps === 1) {
+          if (bgmSubject.type === 1) { // type 1 = Book, type 2 = Anime, type 3 = Music, type 4 = Game, type 6 = Real (Movie)
             mediaType = 'movie';
           }
         }
       }
 
       // Step 3: TMDB
-      const tmdbResult = await TmdbService.search(searchTitle, '', mediaType);
+      const tmdbResult = await tmdbService.search(searchTitle, '', mediaType);
 
-      let tmdbLog = { ...tmdbResult.meta, response: { count: tmdbResult.data.length, top_result: tmdbResult.data[0] || null } };
-      if (tmdbResult.error) tmdbLog.response = { error: tmdbResult.error };
+      const tmdbLog: { meta: typeof tmdbResult.meta; response: unknown } = {
+        ...{ meta: tmdbResult.meta },
+        response: { count: tmdbResult.data.length, top_result: tmdbResult.data[0] || null }
+      };
+      if (tmdbResult.meta.error) tmdbLog.response = { error: tmdbResult.meta.error };
 
       log('【请求API: TMDB】', tmdbLog);
 
       const results = tmdbResult.data;
       let found = false;
-      let embyItem = null;
+      let embyItem: EmbyItem | null = null;
 
       if (results.length > 0) {
         const bestMatch = results[0];
 
         // Step 4: Emby
-        const embyResult = await EmbyService.checkExistence(bestMatch.id);
+        const embyResult = await embyService.checkExistence(bestMatch.id);
         const embyItemFound = embyResult.data;
 
-        let embyLog = { ...embyResult.meta, response: embyItemFound ? `Found: ${embyItemFound.Name} (ID: ${embyItemFound.Id})` : 'Not Found' };
-        if (embyResult.error) embyLog.response = { error: embyResult.error };
+        const embyLog: { meta: typeof embyResult.meta; response: unknown } = {
+          ...{ meta: embyResult.meta },
+          response: embyItemFound ? `Found: ${embyItemFound.Name} (ID: ${embyItemFound.Id})` : 'Not Found'
+        };
+        if (embyResult.meta.error) embyLog.response = { error: embyResult.meta.error };
 
         log('【请求API: Emby】', embyLog);
 
@@ -163,7 +184,7 @@ export class DmhyListHandler {
           found = true;
           updateDot('found', `Found: ${embyItem.Name}`);
 
-          dot.onclick = (e) => {
+          dot.onclick = (e: MouseEvent): void => {
             e.preventDefault();
             e.stopPropagation();
             UI.showDetailModal(cleanTitle, processLog, embyItem, [cleanTitle, searchTitle]);
@@ -175,7 +196,7 @@ export class DmhyListHandler {
 
       if (!found) {
         updateDot('not-found', `Not found. Checked as ${mediaType}`);
-        dot.onclick = (e) => {
+        dot.onclick = (e: MouseEvent): void => {
           e.preventDefault();
           e.stopPropagation();
           UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle, searchTitle]);
@@ -186,10 +207,10 @@ export class DmhyListHandler {
 
     } catch (e) {
       console.error('DMHY Check Error:', e);
-      log('Error', e.toString());
+      log('Error', String(e));
       updateDot('error', 'Error occurred');
       dot.classList.remove('loading');
-      dot.onclick = (e) => {
+      dot.onclick = (e: MouseEvent): void => {
         e.preventDefault();
         e.stopPropagation();
         UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle]);
@@ -197,7 +218,7 @@ export class DmhyListHandler {
     }
   }
 
-  parseTitle(raw) {
+  parseTitle(raw: string): ParsedTitle {
     let title = raw;
     let group = '';
     let res = '';
@@ -220,7 +241,7 @@ export class DmhyListHandler {
 
     // 3. Extract Format
     const fmtKeywords = ['AVC', 'HEVC', 'x264', 'x265', 'MP4', 'MKV', 'WebRip', 'BDRip', 'AAC', 'OPUS', '10bit', '8bit'];
-    const foundFmts = [];
+    const foundFmts: string[] = [];
     fmtKeywords.forEach(k => {
       const regex = new RegExp(k, 'i');
       if (regex.test(title)) {
@@ -232,7 +253,7 @@ export class DmhyListHandler {
 
     // 4. Extract Subtitles
     const subKeywords = ['CHS', 'CHT', 'GB', 'BIG5', 'JPN', 'ENG', '简', '繁', '日', '双语', '内封', '外挂'];
-    title = title.replace(/(?:\[|【|\()([^\]】)]+)(?:\]|】|\))/g, (match, content) => {
+    title = title.replace(/(?:\[|【|\()([^\]】)]+)(?:\]|】|\))/g, (match, content: string) => {
       const up = content.toUpperCase();
       if (subKeywords.some(k => up.includes(k))) {
         sub += ' ' + content;
@@ -242,7 +263,7 @@ export class DmhyListHandler {
     });
 
     // 5. Clean Main Title (Scoring Logic)
-    const scoreStr = (str) => {
+    const scoreStr = (str: string): number => {
       let s = 0; if (!str) return -999;
       const lower = str.toLowerCase();
       if (/[\u4e00-\u9fa5]/.test(str)) s += 15;

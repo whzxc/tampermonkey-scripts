@@ -1,5 +1,5 @@
 import { Utils } from './utils';
-import { CONFIG } from './config';
+import { CONFIG } from './core/api-config';
 import { SettingsHandler, CacheHandler } from './handlers/settings';
 import { GYGHandler, GYGListHandler } from './handlers/gyg';
 import { DoubanSubjectHandler } from './handlers/douban/subject';

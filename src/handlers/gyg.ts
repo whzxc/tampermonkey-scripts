@@ -1,11 +1,17 @@
 import { Utils } from '../utils';
 import { UI } from '../utils/ui';
-import { CONFIG } from '../config';
-import { TmdbService } from '../services/tmdb';
-import { EmbyService } from '../services/emby';
+import { CONFIG } from '../core/api-config';
+import { tmdbService, TmdbSearchResult } from '../services/tmdb';
+import { embyService, EmbyItem } from '../services/emby';
+
+interface LogEntry {
+  time: string;
+  step: string;
+  data: unknown;
+}
 
 export class GYGHandler {
-  init() {
+  init(): void {
     Utils.log('Initializing GYG Handler');
     UI.init();
 
@@ -14,12 +20,12 @@ export class GYGHandler {
     const ratingSection = document.querySelector('.ratings-section');
     if (!metaContainer || !ratingSection) return;
 
-    const titleEl = document.querySelector('.main-meta > .img > picture > img');
+    const titleEl = document.querySelector('.main-meta > .img > picture > img') as HTMLImageElement | null;
     const yearEl = metaContainer.querySelector('h1 .year');
     if (!titleEl) return;
 
-    let titleRaw = titleEl.alt.replace(/第.季/g, '').trim();
-    let yearRaw = yearEl ? yearEl.textContent.replace(/[()]/g, '').trim() : '';
+    const titleRaw = titleEl.alt.replace(/第.季/g, '').trim();
+    const yearRaw = yearEl ? yearEl.textContent?.replace(/[()]/g, '').trim() || '' : '';
 
     const wrapper = document.createElement('div');
     wrapper.className = 'tmdb-wrapper';
@@ -31,26 +37,25 @@ export class GYGHandler {
     const posterContainer = document.querySelector('.main-meta > .img');
     const titleHeader = metaContainer.querySelector('h1');
     if (posterContainer) {
-      this.addDotToPoster(posterContainer, titleHeader, titleRaw, yearRaw);
+      this.addDotToPoster(posterContainer as HTMLElement, titleHeader as HTMLElement, titleRaw, yearRaw);
     }
   }
 
-  async render(title, year, wrapper) {
+  async render(title: string, year: string, wrapper: HTMLElement): Promise<void> {
     wrapper.innerHTML = '<div class="gyg-card" style="text-align:center; color:#999; font-size:12px;">Searching TMDB...</div>';
-    const results = await TmdbService.search(title, year);
+    const results = await tmdbService.search(title, year);
 
-    if (results.length === 0) {
+    if (results.data.length === 0) {
       wrapper.innerHTML = '<div class="gyg-card"><div style="font-size:12px; color:#999; text-align:center;">No TMDB Data</div></div>';
       return;
     }
 
     // Default to first result
-    this.renderCard(results[0], wrapper, results);
+    this.renderCard(results.data[0], wrapper, results.data);
   }
 
-  renderCard(item, wrapper, allResults) {
-    const isMovie = item.media_type === 'movie';
-    const title = item.title || item.name;
+  renderCard(item: TmdbSearchResult, wrapper: HTMLElement, allResults: TmdbSearchResult[]): void {
+    const title = item.title || item.name || '';
     const date = item.release_date || item.first_air_date || '????';
     const yearStr = date.split('-')[0];
     const score = item.vote_average ? item.vote_average.toFixed(1) : '0.0';
@@ -60,8 +65,8 @@ export class GYGHandler {
     // Selector if multiple results
     let selectorHtml = '';
     if (allResults.length > 1) {
-      let options = allResults.map((r, idx) => {
-        const rTitle = r.title || r.name;
+      const options = allResults.map((r, idx) => {
+        const rTitle = r.title || r.name || '';
         const rDate = (r.release_date || r.first_air_date || '').split('-')[0];
         return `<option value="${idx}" ${r.id === item.id ? 'selected' : ''}>${rTitle} (${rDate})</option>`;
       }).join('');
@@ -89,16 +94,18 @@ export class GYGHandler {
     wrapper.innerHTML = html;
 
     // Events
-    const selector = wrapper.querySelector('.result-selector');
+    const selector = wrapper.querySelector('.result-selector') as HTMLSelectElement | null;
     if (selector) {
       selector.addEventListener('change', (e) => {
-        this.renderCard(allResults[e.target.value], wrapper, allResults);
+        const target = e.target as HTMLSelectElement;
+        this.renderCard(allResults[parseInt(target.value)], wrapper, allResults);
       });
     }
 
-    wrapper.querySelector('#tmdb-copy-btn').addEventListener('click', function () {
+    const copyBtn = wrapper.querySelector('#tmdb-copy-btn') as HTMLElement;
+    copyBtn.addEventListener('click', function (this: HTMLElement) {
       Utils.copyToClipboard(copyText, () => {
-        const toast = this.querySelector('.copy-toast');
+        const toast = this.querySelector('.copy-toast') as HTMLElement;
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 1500);
       });
@@ -107,11 +114,12 @@ export class GYGHandler {
     this.checkEmby(item.id, wrapper);
   }
 
-  async checkEmby(tmdbId, wrapper) {
-    const container = wrapper.querySelector('#emby-card-container');
-    const badge = container.querySelector('.emby-badge');
+  async checkEmby(tmdbId: number, wrapper: HTMLElement): Promise<void> {
+    const container = wrapper.querySelector('#emby-card-container') as HTMLElement;
+    const badge = container.querySelector('.emby-badge') as HTMLElement;
 
-    const embyItem = await EmbyService.checkExistence(tmdbId);
+    const embyResult = await embyService.checkExistence(tmdbId);
+    const embyItem = embyResult.data;
     if (embyItem) {
       badge.className = 'emby-badge emby-yes';
       badge.textContent = 'Exists';
@@ -127,12 +135,12 @@ export class GYGHandler {
     }
   }
 
-  async addDotToPoster(container, titleEl, title, year) {
+  async addDotToPoster(container: HTMLElement, titleEl: HTMLElement, title: string, year: string): Promise<void> {
     const dot = UI.createDot({ posterContainer: container, titleElement: titleEl });
     dot.style.zIndex = '20';
 
-    const processLog = [];
-    const log = (step, data) => {
+    const processLog: LogEntry[] = [];
+    const log = (step: string, data: unknown): void => {
       processLog.push({ time: new Date().toLocaleTimeString(), step, data });
     };
 
@@ -145,10 +153,13 @@ export class GYGHandler {
 
     try {
       // Step 2: TMDB
-      const tmdbResult = await TmdbService.search(title, year);
+      const tmdbResult = await tmdbService.search(title, year);
 
-      let tmdbLog = { ...tmdbResult.meta, response: { count: tmdbResult.data.length, top_result: tmdbResult.data[0] || null } };
-      if (tmdbResult.error) tmdbLog.response = { error: tmdbResult.error };
+      const tmdbLog: { meta: typeof tmdbResult.meta; response: unknown } = {
+        ...{ meta: tmdbResult.meta },
+        response: { count: tmdbResult.data.length, top_result: tmdbResult.data[0] || null }
+      };
+      if (tmdbResult.meta.error) tmdbLog.response = { error: tmdbResult.meta.error };
 
       log('【请求API: TMDB】', tmdbLog);
 
@@ -158,25 +169,28 @@ export class GYGHandler {
         const bestMatch = results[0];
 
         // Step 3: Emby
-        const embyResult = await EmbyService.checkExistence(bestMatch.id);
+        const embyResult = await embyService.checkExistence(bestMatch.id);
         const embyItem = embyResult.data;
 
-        let embyLog = { ...embyResult.meta, response: embyItem ? `Found: ${embyItem.Name} (ID: ${embyItem.Id})` : 'Not Found' };
-        if (embyResult.error) embyLog.response = { error: embyResult.error };
+        const embyLog: { meta: typeof embyResult.meta; response: unknown } = {
+          ...{ meta: embyResult.meta },
+          response: embyItem ? `Found: ${embyItem.Name} (ID: ${embyItem.Id})` : 'Not Found'
+        };
+        if (embyResult.meta.error) embyLog.response = { error: embyResult.meta.error };
 
         log('【请求API: Emby】', embyLog);
 
         if (embyItem) {
           dot.className = 'us-dot found';
           dot.title = `Found in Emby: ${embyItem.Name}`;
-          dot.onclick = (e) => {
+          dot.onclick = (e: MouseEvent): void => {
             e.preventDefault(); e.stopPropagation();
             UI.showDetailModal(title, processLog, embyItem, [title]);
           };
         } else {
           dot.className = 'us-dot not-found';
           dot.title = 'Not found in Emby';
-          dot.onclick = (e) => {
+          dot.onclick = (e: MouseEvent): void => {
             e.preventDefault(); e.stopPropagation();
             UI.showDetailModal(title, processLog, null, [title]);
           };
@@ -185,7 +199,7 @@ export class GYGHandler {
         log('【请求API: Emby】', { message: 'Skipped (No TMDB Result)' });
         dot.className = 'us-dot not-found';
         dot.title = 'TMDB Not Found';
-        dot.onclick = (e) => {
+        dot.onclick = (e: MouseEvent): void => {
           e.preventDefault(); e.stopPropagation();
           UI.showDetailModal(title, processLog, null, [title]);
         };
@@ -193,8 +207,8 @@ export class GYGHandler {
     } catch (e) {
       console.error(e);
       dot.className = 'us-dot error';
-      log('Error', e.toString());
-      dot.onclick = (e) => {
+      log('Error', String(e));
+      dot.onclick = (e: MouseEvent): void => {
         e.preventDefault(); e.stopPropagation();
         UI.showDetailModal(title, processLog, null, [title]);
       };
@@ -204,14 +218,14 @@ export class GYGHandler {
 }
 
 export class GYGListHandler {
-  init() {
+  init(): void {
     Utils.log('Initializing GYG List Handler');
     UI.init();
     this.processCards();
     this.observe();
   }
 
-  observe() {
+  observe(): void {
     const observer = new MutationObserver((mutations) => {
       let added = false;
       for (const m of mutations) {
@@ -222,35 +236,35 @@ export class GYGListHandler {
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
-  processCards() {
+  processCards(): void {
     const cards = document.querySelectorAll('li .li-img.cover');
     cards.forEach(imgDiv => {
       const li = imgDiv.closest('li');
       if (!li) return;
 
       // Use a unique attribute to avoid double processing
-      if (li.dataset.gygEmbyChecked) return;
-      li.dataset.gygEmbyChecked = 'true';
+      if ((li as HTMLElement).dataset.gygEmbyChecked) return;
+      (li as HTMLElement).dataset.gygEmbyChecked = 'true';
 
       // Fire and forget check
-      this.checkCard(li, imgDiv);
+      this.checkCard(li as HTMLElement, imgDiv as HTMLElement);
     });
   }
 
-  async checkCard(li, imgDiv) {
+  async checkCard(li: HTMLElement, imgDiv: HTMLElement): Promise<void> {
     // Find Title
-    const titleEl = li.querySelector('.li-bottom h3 a');
+    const titleEl = li.querySelector('.li-bottom h3 a') as HTMLAnchorElement | null;
     if (!titleEl) return;
 
-    let rawTitle = titleEl.getAttribute('title') || titleEl.textContent;
-    rawTitle = rawTitle ? rawTitle.trim() : '';
+    let rawTitle = titleEl.getAttribute('title') || titleEl.textContent || '';
+    rawTitle = rawTitle.trim();
 
     // Find Year
     const tagEl = li.querySelector('.li-bottom .tag');
     let year = '';
     if (tagEl) {
-      const parts = tagEl.textContent.split('/');
-      year = parts[0].trim();
+      const parts = tagEl.textContent?.split('/') || [];
+      year = parts[0]?.trim() || '';
     }
 
     // Title Cleaning
@@ -259,7 +273,7 @@ export class GYGListHandler {
     // Regex to detect "Season N", "第N季", "S5"
     const seasonRegex = /(?:[\s:：(（\[【]|^)(?:第[0-9一二三四五六七八九十]+季|Season\s*\d+|S\d+).*/i;
 
-    let yearParam = year;
+    const yearParam = year;
     if (seasonRegex.test(rawTitle)) {
       cleanTitle = rawTitle.replace(seasonRegex, '').trim();
     }
@@ -269,8 +283,8 @@ export class GYGListHandler {
     dot.title = `Checking ${cleanTitle}...`;
 
     // Log for Modal
-    const processLog = [];
-    const log = (step, data) => {
+    const processLog: LogEntry[] = [];
+    const log = (step: string, data: unknown): void => {
       processLog.push({ time: new Date().toLocaleTimeString(), step, data });
     };
 
@@ -283,28 +297,34 @@ export class GYGListHandler {
 
     try {
       // Step 2: TMDB
-      const tmdbResult = await TmdbService.search(cleanTitle, yearParam);
+      const tmdbResult = await tmdbService.search(cleanTitle, yearParam);
 
-      let tmdbLog = { ...tmdbResult.meta, response: { count: tmdbResult.data.length, top_result: tmdbResult.data[0] || null } };
-      if (tmdbResult.error) tmdbLog.response = { error: tmdbResult.error };
+      const tmdbLog: { meta: typeof tmdbResult.meta; response: unknown } = {
+        ...{ meta: tmdbResult.meta },
+        response: { count: tmdbResult.data.length, top_result: tmdbResult.data[0] || null }
+      };
+      if (tmdbResult.meta.error) tmdbLog.response = { error: tmdbResult.meta.error };
 
       log('【请求API: TMDB】', tmdbLog);
 
       const results = tmdbResult.data;
 
       let found = false;
-      let embyItem = null;
+      let embyItem: EmbyItem | null = null;
 
       if (results.length > 0) {
         // Try the first match
         const bestMatch = results[0];
 
         // Step 3: Emby
-        const embyResult = await EmbyService.checkExistence(bestMatch.id);
+        const embyResult = await embyService.checkExistence(bestMatch.id);
         embyItem = embyResult.data;
 
-        let embyLog = { ...embyResult.meta, response: embyItem ? `Found: ${embyItem.Name} (ID: ${embyItem.Id})` : 'Not Found' };
-        if (embyResult.error) embyLog.response = { error: embyResult.error };
+        const embyLog: { meta: typeof embyResult.meta; response: unknown } = {
+          ...{ meta: embyResult.meta },
+          response: embyItem ? `Found: ${embyItem.Name} (ID: ${embyItem.Id})` : 'Not Found'
+        };
+        if (embyResult.meta.error) embyLog.response = { error: embyResult.meta.error };
 
         log('【请求API: Emby】', embyLog);
 
@@ -312,7 +332,7 @@ export class GYGListHandler {
           found = true;
           dot.className = 'us-dot found';
           dot.title = `Play ${embyItem.Name} on Emby`;
-          dot.onclick = (e) => {
+          dot.onclick = (e: MouseEvent): void => {
             e.preventDefault(); e.stopPropagation();
             UI.showDetailModal(cleanTitle, processLog, embyItem, [cleanTitle]);
           };
@@ -324,7 +344,7 @@ export class GYGListHandler {
       if (!found) {
         dot.className = 'us-dot not-found';
         dot.title = 'Not found in Emby';
-        dot.onclick = (e) => {
+        dot.onclick = (e: MouseEvent): void => {
           e.preventDefault(); e.stopPropagation();
           UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle]);
         };
@@ -335,9 +355,9 @@ export class GYGListHandler {
     } catch (e) {
       console.error('GYG Check Error:', e);
       dot.className = 'us-dot error';
-      log('Error', e.toString());
+      log('Error', String(e));
       dot.classList.remove('loading');
-      dot.onclick = (e) => {
+      dot.onclick = (e: MouseEvent): void => {
         e.preventDefault(); e.stopPropagation();
         UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle]);
       };

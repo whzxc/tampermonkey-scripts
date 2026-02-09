@@ -1,10 +1,28 @@
 import { Utils } from '../../utils';
 import { UI } from '../../utils/ui';
-import { CONFIG } from '../../config';
-import { TmdbService } from '../../services/tmdb';
-import { EmbyService } from '../../services/emby';
+import { CONFIG } from '../../core/api-config';
+import { tmdbService } from '../../services/tmdb';
+import { embyService, EmbyItem } from '../../services/emby';
+
+interface Strategy {
+  name: string;
+  itemSelector: string;
+  titleSelector: string;
+  yearSelector: string;
+  getYear: (el: Element | null) => string;
+  getType: (card: Element) => 'tv' | 'movie' | null;
+  getCover: (card: Element) => Element | null | undefined;
+}
+
+interface LogEntry {
+  time: string;
+  step: string;
+  data: unknown;
+}
 
 export class DoubanListHandler {
+  private strategies: Strategy[];
+
   constructor() {
     this.strategies = [
       {
@@ -15,7 +33,7 @@ export class DoubanListHandler {
         yearSelector: '.drc-subject-info-subtitle',
         getYear: (el) => {
           const text = el ? el.textContent : '';
-          return text.split('/').map(t => t.trim())[0] || '';
+          return text?.split('/').map(t => t.trim())[0] || '';
         },
         getType: (card) => {
           if (card.classList.contains('tv')) return 'tv';
@@ -33,10 +51,10 @@ export class DoubanListHandler {
         getYear: (el) => {
           // Format: "2024-05-01(China) / ..." or "2023 / ..."
           const text = el ? el.textContent : '';
-          const match = text.match(/(\d{4})/);
+          const match = text?.match(/(\d{4})/);
           return match ? match[1] : '';
         },
-        getType: (card) => 'movie',
+        getType: () => 'movie',
         getCover: (card) => card.querySelector('a.nbg')
       },
       {
@@ -47,7 +65,7 @@ export class DoubanListHandler {
         yearSelector: '.frc-subject-info-content',
         getYear: (el) => {
           const text = el ? el.textContent : '';
-          return text.split('/').map(t => t.trim())[0] || '';
+          return text?.split('/').map(t => t.trim())[0] || '';
         },
         getType: (card) => {
           let parent = card.parentElement;
@@ -63,13 +81,13 @@ export class DoubanListHandler {
     ];
   }
 
-  init() {
+  init(): void {
     Utils.log('Initializing Douban List Handler');
     UI.init();
     this.observe();
   }
 
-  observe() {
+  observe(): void {
     this.processExistingCards();
 
     const observer = new MutationObserver((mutations) => {
@@ -83,7 +101,7 @@ export class DoubanListHandler {
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
-  processExistingCards() {
+  processExistingCards(): void {
     // Iterate over all strategies to find matching items
     this.strategies.forEach(strategy => {
       const cards = document.querySelectorAll(strategy.itemSelector);
@@ -97,29 +115,29 @@ export class DoubanListHandler {
         let rawTitle = '';
 
         if (strategy.name === 'Explore/TV') {
-          rawTitle = titleEl.textContent.trim();
+          rawTitle = titleEl.textContent?.trim() || '';
         } else if (strategy.name === 'SubjectCollection') {
           rawTitle = Array.from(titleEl.childNodes)
             .filter(n => n.nodeType === 3) // Text nodes
             .map(n => n.textContent)
             .join('').trim();
-          if (!rawTitle) rawTitle = titleEl.textContent.trim(); // Fallback
+          if (!rawTitle) rawTitle = titleEl.textContent?.trim() || ''; // Fallback
         } else {
           // Chart
-          rawTitle = titleEl.childNodes[0].textContent.trim().split('/')[0].trim();
+          rawTitle = titleEl.childNodes[0]?.textContent?.trim().split('/')[0].trim() || '';
         }
 
         // Check if already processed and title matches
-        if (card.getAttribute('data-gyg-title') === rawTitle) {
+        if ((card as HTMLElement).getAttribute('data-gyg-title') === rawTitle) {
           return;
         }
 
-        this.processCard(card, strategy, rawTitle);
+        this.processCard(card as HTMLElement, strategy, rawTitle);
       });
     });
   }
 
-  async processCard(card, strategy, rawTitle) {
+  async processCard(card: HTMLElement, strategy: Strategy, rawTitle: string): Promise<void> {
     // Mark as processed with current title
     card.setAttribute('data-gyg-title', rawTitle);
 
@@ -147,27 +165,28 @@ export class DoubanListHandler {
 
     // Create Dot
     const dot = UI.createDot({
-      posterContainer: coverEl,
-      titleElement: titleEl
+      posterContainer: coverEl as HTMLElement,
+      titleElement: titleEl as HTMLElement
     });
     dot.title = `Checking ${cleanTitle}...`;
 
-    const processLog = [{ time: new Date().toLocaleTimeString(), step: 'Init', data: `Title: ${cleanTitle}, Year: ${useYear}, Type: ${mediaType}` }];
+    const processLog: LogEntry[] = [{ time: new Date().toLocaleTimeString(), step: 'Init', data: `Title: ${cleanTitle}, Year: ${useYear}, Type: ${mediaType}` }];
 
     try {
-      const results = await TmdbService.search(cleanTitle, useYear, mediaType);
+      const results = await tmdbService.search(cleanTitle, useYear, mediaType);
 
       let found = false;
-      let embyItem = null;
+      let embyItem: EmbyItem | null = null;
 
-      if (results.length > 0) {
-        const bestMatch = results[0];
-        embyItem = await EmbyService.checkExistence(bestMatch.id);
+      if (results.data.length > 0) {
+        const bestMatch = results.data[0];
+        const embyResult = await embyService.checkExistence(bestMatch.id);
+        embyItem = embyResult.data;
         if (embyItem) {
           found = true;
           dot.className = 'us-dot found';
           dot.title = `Found in Emby: ${embyItem.Name}`;
-          dot.onclick = (e) => {
+          dot.onclick = (e: MouseEvent): void => {
             e.preventDefault(); e.stopPropagation();
             UI.showDetailModal(cleanTitle, processLog, embyItem, [cleanTitle]);
           };
@@ -177,7 +196,7 @@ export class DoubanListHandler {
       if (!found) {
         dot.className = 'us-dot not-found';
         dot.title = 'Not found in Emby';
-        dot.onclick = (e) => {
+        dot.onclick = (e: MouseEvent): void => {
           e.preventDefault(); e.stopPropagation();
           UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle]);
         };

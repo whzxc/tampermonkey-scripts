@@ -1,8 +1,30 @@
-import { CONFIG } from '../config';
+import { CONFIG } from '../core/api-config';
 import { Utils } from './index';
+import { EmbyItem } from '../services/emby';
+
+interface DotOptions {
+  posterContainer?: HTMLElement;
+  titleElement?: HTMLElement;
+}
+
+interface LogEntry {
+  time: string;
+  step: string;
+  data?: unknown;
+  status?: string;
+}
+
+interface LogDataWithMeta {
+  meta?: {
+    method?: string;
+    url?: string;
+    body?: unknown;
+  };
+  response?: unknown;
+}
 
 export const UI = {
-  init() {
+  init(): void {
     Utils.addStyle(`
             /* DOT STYLES */
             .us-dot {
@@ -128,12 +150,8 @@ export const UI = {
 
   /**
    * Create a standardized status dot.
-   * @param {Object} options
-   * @param {HTMLElement} options.posterContainer (Optional) Container for absolute positioning
-   * @param {HTMLElement} options.titleElement (Optional) Element for relative positioning (left/right)
-   * @returns {HTMLElement} The dot element
    */
-  createDot(options = {}) {
+  createDot(options: DotOptions = {}): HTMLDivElement {
     const { posterContainer, titleElement } = options;
     const dot = document.createElement('div');
     dot.className = 'us-dot loading';
@@ -206,10 +224,10 @@ export const UI = {
     if (isTitlePos && titleElement) {
       // Insert into flow
       if (configPos === 'title_right') {
-        titleElement.parentNode.insertBefore(dot, titleElement.nextSibling);
+        titleElement.parentNode?.insertBefore(dot, titleElement.nextSibling);
         dot.style.marginLeft = '6px';
       } else {
-        titleElement.parentNode.insertBefore(dot, titleElement);
+        titleElement.parentNode?.insertBefore(dot, titleElement);
         dot.style.marginRight = '6px';
       }
     } else if (posterContainer) {
@@ -221,10 +239,8 @@ export const UI = {
 
   /**
    * Show a modal with large text content.
-   * @param {String} title 
-   * @param {String} content 
    */
-  showTextModal(title, content) {
+  showTextModal(title: string, content: string): void {
     const id = 'us-text-modal';
     const existing = document.getElementById(id);
     if (existing) existing.remove();
@@ -234,7 +250,7 @@ export const UI = {
     overlay.className = 'us-modal-overlay';
     overlay.style.zIndex = '10001'; // Above detail modal
 
-    overlay.onclick = (e) => {
+    overlay.onclick = (e: MouseEvent): void => {
       if (e.target === overlay) overlay.remove();
     };
 
@@ -242,7 +258,7 @@ export const UI = {
         <div class="us-modal" style="width: 600px; max-width: 95%;">
             <div class="us-modal-header">
                 <div class="us-modal-title">${title}</div>
-                <div class="us-modal-close" onclick="document.getElementById('${id}').remove()">&times;</div>
+                <div class="us-modal-close" onclick="document.getElementById('${id}')?.remove()">&times;</div>
             </div>
             <div class="us-modal-body" style="padding: 15px;">
                 <textarea style="width:100%; height:400px; font-family:monospace; font-size:12px; border:1px solid #ddd; padding:10px; resize:vertical;" readonly>${content}</textarea>
@@ -255,12 +271,8 @@ export const UI = {
 
   /**
    * Show the Detail Modal.
-   * @param {String} title
-   * @param {Array} logs - Step logs [{time, step, data}]
-   * @param {Object|null} embyItem
-   * @param {Array} searchQueries - Strings to search
    */
-  showDetailModal(title, logs, embyItem = null, searchQueries = []) {
+  showDetailModal(title: string, logs: LogEntry[], embyItem: EmbyItem | null = null, searchQueries: string[] = []): void {
     const id = 'us-detail-modal';
     const existing = document.getElementById(id);
     if (existing) existing.remove();
@@ -270,14 +282,13 @@ export const UI = {
     overlay.className = 'us-modal-overlay';
 
     // Close on overlay click
-    overlay.onclick = (e) => {
+    overlay.onclick = (e: MouseEvent): void => {
       if (e.target === overlay) overlay.remove();
     };
 
     // --- Emby Card HTML ---
     let embyHtml = '';
     if (embyItem) {
-      const isMovie = embyItem.Type === 'Movie';
       const year = embyItem.ProductionYear || '';
       const rating = embyItem.CommunityRating ? embyItem.CommunityRating.toFixed(1) : (embyItem.OfficialRating || '');
       const path = embyItem.Path || (embyItem.MediaSources && embyItem.MediaSources[0] && embyItem.MediaSources[0].Path) || 'Path Unknown';
@@ -286,12 +297,12 @@ export const UI = {
       const imgUrl = `${CONFIG.emby.server}/emby/Items/${embyItem.Id}/Images/Primary?maxHeight=300&maxWidth=200&quality=90`;
 
       // Tech Info
-      let techInfo = [];
-      let streamInfo = [];
+      let techInfo: string[] = [];
+      const streamInfo: string[] = [];
 
       if (embyItem.MediaSources && embyItem.MediaSources.length > 0) {
         const source = embyItem.MediaSources[0];
-        const sizeBytes = source.Size;
+        const sizeBytes = source.Size || 0;
         const sizeGB = (sizeBytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
         const container = source.Container || '';
 
@@ -310,7 +321,7 @@ export const UI = {
             const bitrate = video.BitRate ? (video.BitRate / 1000000).toFixed(1) + ' Mbps' : '';
             const bitDepth = video.BitDepth ? `${video.BitDepth}bit` : '';
 
-            let vInfo = [];
+            const vInfo: string[] = [];
             if (resolution) vInfo.push(resolution);
             if (codec) vInfo.push(codec);
             if (bitrate) vInfo.push(bitrate);
@@ -384,7 +395,7 @@ export const UI = {
       let detailHtml = '';
 
       // Helper to render complex data
-      const renderData = (data) => {
+      const renderData = (data: unknown): string => {
         if (!data) return '';
         if (typeof data === 'string') return `<div style="margin-top:4px;">${data}</div>`;
         if (Array.isArray(data)) {
@@ -394,7 +405,7 @@ export const UI = {
 
         // Object: specialized rendering depending on structure
         let html = '<div style="margin-top:6px;">';
-        for (const [key, val] of Object.entries(data)) {
+        for (const [key, val] of Object.entries(data as Record<string, unknown>)) {
           if (val === null || val === undefined) continue;
           // Skip 'response' if handled separately, but here we process general objects
           html += `<div style="font-size:12px; margin-bottom:2px;">
@@ -408,9 +419,10 @@ export const UI = {
 
       // Heuristic for structured log data (from new handler logic)
       // If data has 'meta' (url/method) and 'response'
-      if (l.data && l.data.meta) {
-        const meta = l.data.meta;
-        const response = l.data.response;
+      const logData = l.data as LogDataWithMeta | undefined;
+      if (logData && logData.meta) {
+        const meta = logData.meta;
+        const response = logData.response;
         const method = meta.method || 'GET';
         const url = meta.url || '';
         const body = meta.body ? JSON.stringify(meta.body) : '';
@@ -429,11 +441,6 @@ export const UI = {
           const isLong = lines.length > 5 || respStr.length > 500; // Backup length check
           const shortResp = lines.slice(0, 5).join('\n') + (isLong ? '\n...' : '');
 
-          // Store full content in a data attribute or global map? 
-          // Or just pass to showTextModal. 
-          // We need to escape single quotes for the function call.
-          const safeRespStr = respStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
-
           detailHtml += `
                         <div style="margin-top:4px; border-left:2px solid #ddd; padding-left:8px;">
                             <div style="font-size:11px; color:#28a745; font-weight:bold;">Response:</div>
@@ -442,11 +449,7 @@ export const UI = {
                         </div>
                      `;
 
-          // Defer binding the click event until after render? 
-          // No, let's use a workaround. We can't put massive strings in onclick attribute easily.
-          // We'll attach IDs and bind events after innerHTML set.
-          // But here we are building string. 
-          // Workaround: bind to window or use a temporary stash.
+          // Store for later binding
           if (isLong) {
             if (!window._us_log_stash) window._us_log_stash = {};
             window._us_log_stash[index] = respStr;
@@ -487,7 +490,7 @@ export const UI = {
         <div class="us-modal">
             <div class="us-modal-header">
                 <div class="us-modal-title">${title}</div>
-                <div class="us-modal-close" onclick="document.getElementById('${id}').remove()">&times;</div>
+                <div class="us-modal-close" onclick="document.getElementById('${id}')?.remove()">&times;</div>
             </div>
             
             <div class="us-modal-body">
@@ -506,7 +509,7 @@ export const UI = {
             </div>
             
             <div style="padding:15px; background:#f8f9fa; text-align:right; border-top:1px solid #eee;">
-                 <button class="us-btn us-btn-outline" onclick="document.getElementById('${id}').remove()">Close</button>
+                 <button class="us-btn us-btn-outline" onclick="document.getElementById('${id}')?.remove()">Close</button>
             </div>
         </div>
     `;
@@ -518,7 +521,7 @@ export const UI = {
       Object.keys(window._us_log_stash).forEach(idx => {
         const btn = document.getElementById(`us-resp-btn-${idx}`);
         if (btn) {
-          btn.onclick = () => UI.showTextModal('Full Response', window._us_log_stash[idx]);
+          btn.onclick = () => UI.showTextModal('Full Response', window._us_log_stash![parseInt(idx)]);
         }
       });
     }
