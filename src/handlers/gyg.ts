@@ -3,14 +3,9 @@ import { UI } from '../utils/ui';
 import { CONFIG } from '../core/api-config';
 import { tmdbService, TmdbSearchResult } from '../services/tmdb';
 import { embyService, EmbyItem } from '../services/emby';
+import { BaseMediaHandler } from './base-handler';
 
-interface LogEntry {
-  time: string;
-  step: string;
-  data: unknown;
-}
-
-export class GYGHandler {
+export class GYGHandler extends BaseMediaHandler {
   init(): void {
     Utils.log('Initializing GYG Handler');
     UI.init();
@@ -139,86 +134,17 @@ export class GYGHandler {
     const dot = UI.createDot({ posterContainer: container, titleElement: titleEl });
     dot.style.zIndex = '20';
 
-    const processLog: LogEntry[] = [];
-    const log = (step: string, data: unknown): void => {
-      processLog.push({ time: new Date().toLocaleTimeString(), step, data });
-    };
-
-    // Step 1: 解析标题
-    log('【解析标题】', {
-      'Original Title': title,
-      'Year': year,
-      'Parsed Title': title // GYG titles are usually clean
-    });
-
     try {
-      // Step 2: TMDB
-      const tmdbResult = await tmdbService.search(title, year);
-
-      const tmdbLog: { meta: typeof tmdbResult.meta; response: unknown } = {
-        ...{ meta: tmdbResult.meta },
-        response: { count: tmdbResult.data.length, top_result: tmdbResult.data[0] || null }
-      };
-      if (tmdbResult.meta.error) tmdbLog.response = { error: tmdbResult.meta.error };
-
-      log('【请求API: TMDB】', tmdbLog);
-
-      const results = tmdbResult.data;
-
-      if (results.length > 0) {
-        const bestMatch = results[0];
-        const tmdbId = bestMatch.id;
-
-        // Step 3: Emby
-        const embyResult = await embyService.checkExistence(bestMatch.id);
-        const embyItem = embyResult.data;
-
-        const embyLog: { meta: typeof embyResult.meta; response: unknown } = {
-          ...{ meta: embyResult.meta },
-          response: embyItem ? `Found: ${embyItem.Name} (ID: ${embyItem.Id})` : 'Not Found'
-        };
-        if (embyResult.meta.error) embyLog.response = { error: embyResult.meta.error };
-
-        log('【请求API: Emby】', embyLog);
-
-        if (embyItem) {
-          dot.className = 'us-dot found';
-          dot.title = `Found in Emby: ${embyItem.Name}`;
-          dot.onclick = (e: MouseEvent): void => {
-            e.preventDefault(); e.stopPropagation();
-            UI.showDetailModal(title, processLog, embyItem, [title], { id: tmdbId, mediaType: 'movie' });
-          };
-        } else {
-          dot.className = 'us-dot not-found';
-          dot.title = 'Not found in Emby';
-          dot.onclick = (e: MouseEvent): void => {
-            e.preventDefault(); e.stopPropagation();
-            UI.showDetailModal(title, processLog, null, [title], { id: tmdbId, mediaType: 'movie' });
-          };
-        }
-      } else {
-        log('【请求API: Emby】', { message: 'Skipped (No TMDB Result)' });
-        dot.className = 'us-dot not-found';
-        dot.title = 'TMDB Not Found';
-        dot.onclick = (e: MouseEvent): void => {
-          e.preventDefault(); e.stopPropagation();
-          UI.showDetailModal(title, processLog, null, [title]);
-        };
-      }
+      // 使用基类的通用媒体检查流程
+      const result = await this.checkMedia(title, year, 'movie', title);
+      this.updateDotStatus(dot, result, title, [title]);
     } catch (e) {
-      console.error(e);
-      dot.className = 'us-dot error';
-      log('Error', String(e));
-      dot.onclick = (e: MouseEvent): void => {
-        e.preventDefault(); e.stopPropagation();
-        UI.showDetailModal(title, processLog, null, [title]);
-      };
+      this.handleError(dot, e, title, this.logger);
     }
-    dot.classList.remove('loading');
   }
 }
 
-export class GYGListHandler {
+export class GYGListHandler extends BaseMediaHandler {
   init(): void {
     Utils.log('Initializing GYG List Handler');
     UI.init();
@@ -283,85 +209,12 @@ export class GYGListHandler {
     const dot = UI.createDot({ posterContainer: imgDiv, titleElement: titleEl });
     dot.title = `Checking ${cleanTitle}...`;
 
-    // Log for Modal
-    const processLog: LogEntry[] = [];
-    const log = (step: string, data: unknown): void => {
-      processLog.push({ time: new Date().toLocaleTimeString(), step, data });
-    };
-
-    // Step 1: 解析标题
-    log('【解析标题】', {
-      'Original Title': rawTitle,
-      'Year': year,
-      'Cleaned Title': cleanTitle
-    });
-
     try {
-      // Step 2: TMDB
-      const tmdbResult = await tmdbService.search(cleanTitle, yearParam);
-
-      const tmdbLog: { meta: typeof tmdbResult.meta; response: unknown } = {
-        ...{ meta: tmdbResult.meta },
-        response: { count: tmdbResult.data.length, top_result: tmdbResult.data[0] || null }
-      };
-      if (tmdbResult.meta.error) tmdbLog.response = { error: tmdbResult.meta.error };
-
-      log('【请求API: TMDB】', tmdbLog);
-
-      const results = tmdbResult.data;
-
-      let found = false;
-      let embyItem: EmbyItem | null = null;
-
-      if (results.length > 0) {
-        const bestMatch = results[0];
-        const tmdbId = bestMatch.id;
-
-        // Step 3: Emby
-        const embyResult = await embyService.checkExistence(bestMatch.id);
-        embyItem = embyResult.data;
-
-        const embyLog: { meta: typeof embyResult.meta; response: unknown } = {
-          ...{ meta: embyResult.meta },
-          response: embyItem ? `Found: ${embyItem.Name} (ID: ${embyItem.Id})` : 'Not Found'
-        };
-        if (embyResult.meta.error) embyLog.response = { error: embyResult.meta.error };
-
-        log('【请求API: Emby】', embyLog);
-
-        if (embyItem) {
-          found = true;
-          dot.className = 'us-dot found';
-          dot.title = `Play ${embyItem.Name} on Emby`;
-          dot.onclick = (e: MouseEvent): void => {
-            e.preventDefault(); e.stopPropagation();
-            UI.showDetailModal(cleanTitle, processLog, embyItem, [cleanTitle], { id: tmdbId, mediaType: 'movie' });
-          };
-        }
-      } else {
-        log('【请求API: Emby】', { message: 'Skipped (No TMDB Result)' });
-      }
-
-      if (!found) {
-        dot.className = 'us-dot not-found';
-        dot.title = 'Not found in Emby';
-        dot.onclick = (e: MouseEvent): void => {
-          e.preventDefault(); e.stopPropagation();
-          UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle]);
-        };
-      }
-
-      dot.classList.remove('loading');
-
+      // 使用基类的通用媒体检查流程
+      const result = await this.checkMedia(cleanTitle, yearParam, null, rawTitle);
+      this.updateDotStatus(dot, result, cleanTitle, [cleanTitle]);
     } catch (e) {
-      console.error('GYG Check Error:', e);
-      dot.className = 'us-dot error';
-      log('Error', String(e));
-      dot.classList.remove('loading');
-      dot.onclick = (e: MouseEvent): void => {
-        e.preventDefault(); e.stopPropagation();
-        UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle]);
-      };
+      this.handleError(dot, e, cleanTitle, this.logger);
     }
   }
 }

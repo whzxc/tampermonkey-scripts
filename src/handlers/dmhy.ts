@@ -4,23 +4,11 @@ import { CONFIG } from '../core/api-config';
 import { tmdbService, TmdbSearchResult } from '../services/tmdb';
 import { embyService, EmbyItem } from '../services/emby';
 import { bangumiService } from '../services/bangumi';
+import { BaseMediaHandler } from './base-handler';
+import { parseDmhyTitle } from '../utils/title-parser';
+import { ParsedTitle, MediaType } from '../types/common';
 
-interface ParsedTitle {
-  title: string;
-  group: string;
-  res: string;
-  sub: string;
-  fmt: string;
-}
-
-interface LogEntry {
-  time: string;
-  step: string;
-  data: unknown;
-  status?: string;
-}
-
-export class DmhyListHandler {
+export class DmhyListHandler extends BaseMediaHandler {
   init(): void {
     Utils.log('Initializing DMHY List Handler');
     UI.init();
@@ -65,41 +53,12 @@ export class DmhyListHandler {
   async checkRow(tr: HTMLElement, link: HTMLAnchorElement): Promise<void> {
     const rawTitle = link.textContent?.trim() || '';
 
-    // Process Log Record
-    const processLog: LogEntry[] = [];
-    const log = (step: string, data: unknown): void => {
-      processLog.push({ time: new Date().toLocaleTimeString(), step, data });
-    };
-
     // Step 1: 解析标题
-    const parsed = this.parseTitle(rawTitle);
-    log('【解析标题】', {
-      'Original Title': rawTitle,
-      'Parsed Title': parsed.title,
-      'Group': parsed.group,
-      'Resolution': parsed.res,
-      'Format': parsed.fmt,
-      'Subtitle': parsed.sub
-    });
-
+    const parsed = parseDmhyTitle(rawTitle); // 使用统一工具
     const cleanTitle = parsed.title;
 
-    // Add loading/status indicator (The Shared Dot)
-    // DMHY typically has no poster in list, so we pass titleElement only.
-    // 'auto' mode will default to 'title_left'.
+    // Add loading/status indicator  
     const dot = UI.createDot({ titleElement: link });
-
-    const updateDot = (status: string, titleOverride?: string): void => {
-      dot.className = `us-dot ${status}`;
-      if (titleOverride) dot.title = titleOverride;
-    };
-
-    // Default Click: Show Modal
-    dot.onclick = (e: MouseEvent): void => {
-      e.preventDefault();
-      e.stopPropagation();
-      UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle]);
-    };
 
     // Update UI if valid
     if (cleanTitle) {
@@ -118,215 +77,37 @@ export class DmhyListHandler {
       link.appendChild(document.createTextNode(cleanTitle + ' ')); // Title first
 
       if (parsed.group) addTag(parsed.group, 'group'); // Group after title
-      addTag(parsed.res, 'res');
-      addTag(parsed.fmt, 'fmt');
-      addTag(parsed.sub, 'sub');
+      addTag(parsed.resolution || '', 'res');
+      addTag(parsed.format || '', 'fmt');
+      addTag(parsed.subtitle || '', 'sub');
     }
 
     if (!cleanTitle) return;
 
     try {
       let searchTitle = cleanTitle;
-      let mediaType: 'movie' | 'tv' = 'tv'; // Default type
-
-
+      let mediaType: MediaType = 'tv'; // Default type
 
       // Step 2: Bangumi
       if (CONFIG.bangumi.apiKey) {
         const bgmResult = await bangumiService.search(cleanTitle);
-
-        // 构建包含 URL 的日志数据
-        const bgmLog = {
-          meta: {
-            method: 'POST',
-            url: `${CONFIG.bangumi.baseUrl}/search/subjects`,
-            body: { keyword: cleanTitle, filter: { type: [2] } },
-            ...bgmResult.meta
-          },
-          response: bgmResult.data || bgmResult.meta.error || 'No Result'
-        };
-        log('【请求API: Bangumi】', bgmLog);
-
         const bgmSubject = bgmResult.data;
         if (bgmSubject) {
           searchTitle = bgmSubject.name_cn || bgmSubject.name;
           // Detect Media Type (Movie vs TV)
-          if (bgmSubject.type === 1) { // type 1 = Book, type 2 = Anime, type 3 = Music, type 4 = Game, type 6 = Real (Movie)
+          if (bgmSubject.type === 1) {
             mediaType = 'movie';
           }
         }
       }
 
-      // Step 3: TMDB
-      const tmdbResult = await tmdbService.search(searchTitle, '', mediaType);
-
-      const tmdbLog: { meta: typeof tmdbResult.meta; response: unknown } = {
-        ...{ meta: tmdbResult.meta },
-        response: { count: tmdbResult.data.length, top_result: tmdbResult.data[0] || null }
-      };
-      if (tmdbResult.meta.error) tmdbLog.response = { error: tmdbResult.meta.error };
-
-      log('【请求API: TMDB】', tmdbLog);
-
-      const results = tmdbResult.data;
-      let found = false;
-      let embyItem: EmbyItem | null = null;
-      let tmdbId: number | null = null;
-
-      if (results.length > 0) {
-        const bestMatch = results[0];
-        tmdbId = bestMatch.id;
-
-        // Step 4: Emby
-        const embyResult = await embyService.checkExistence(bestMatch.id);
-        const embyItemFound = embyResult.data;
-
-        const embyLog: { meta: typeof embyResult.meta; response: unknown } = {
-          ...{ meta: embyResult.meta },
-          response: embyItemFound ? `Found: ${embyItemFound.Name} (ID: ${embyItemFound.Id})` : 'Not Found'
-        };
-        if (embyResult.meta.error) embyLog.response = { error: embyResult.meta.error };
-
-        log('【请求API: Emby】', embyLog);
-
-        embyItem = embyItemFound;
-
-        if (embyItem) {
-          found = true;
-          updateDot('found', `Found: ${embyItem.Name}`);
-
-          dot.onclick = (e: MouseEvent): void => {
-            e.preventDefault();
-            e.stopPropagation();
-            UI.showDetailModal(cleanTitle, processLog, embyItem, [cleanTitle, searchTitle], tmdbId ? { id: tmdbId, mediaType } : undefined);
-          };
-        }
-      } else {
-        log('【请求API: Emby】', { message: 'Skipped (No TMDB Result)' });
-      }
-
-      if (!found) {
-        updateDot('not-found', `Not found. Checked as ${mediaType}`);
-        dot.onclick = (e: MouseEvent): void => {
-          e.preventDefault();
-          e.stopPropagation();
-          UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle, searchTitle], tmdbId ? { id: tmdbId, mediaType } : undefined);
-        };
-      }
-
-      dot.classList.remove('loading');
-
+      // 使用基类的通用媒体检查流程
+      const result = await this.checkMedia(searchTitle, '', mediaType, rawTitle);
+      this.updateDotStatus(dot, result, cleanTitle, [cleanTitle, searchTitle]);
     } catch (e) {
-      console.error('DMHY Check Error:', e);
-      log('Error', String(e));
-      updateDot('error', 'Error occurred');
-      dot.classList.remove('loading');
-      dot.onclick = (e: MouseEvent): void => {
-        e.preventDefault();
-        e.stopPropagation();
-        UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle]);
-      };
+      this.handleError(dot, e, cleanTitle, this.logger);
     }
   }
 
-  parseTitle(raw: string): ParsedTitle {
-    let title = raw;
-    let group = '';
-    let res = '';
-    let sub = '';
-    let fmt = '';
 
-    // 1. Extract Group (Brackets at start)
-    const groupMatch = title.match(/^(?:\[|【)([^\]】]+)(?:\]|】)/);
-    if (groupMatch) {
-      group = groupMatch[1];
-      title = title.replace(groupMatch[0], ' ');
-    }
-
-    // 2. Extract Resolution
-    const resMatch = title.match(/(?:1080[pP]|720[pP]|2160[pP]|4[kK])/);
-    if (resMatch) {
-      res = resMatch[0];
-      title = title.replace(new RegExp(resMatch[0], 'i'), ' ');
-    }
-
-    // 3. Extract Format
-    const fmtKeywords = ['AVC', 'HEVC', 'x264', 'x265', 'MP4', 'MKV', 'WebRip', 'BDRip', 'AAC', 'OPUS', '10bit', '8bit'];
-    const foundFmts: string[] = [];
-    fmtKeywords.forEach(k => {
-      const regex = new RegExp(k, 'i');
-      if (regex.test(title)) {
-        foundFmts.push(k);
-        title = title.replace(regex, ' ');
-      }
-    });
-    fmt = foundFmts.join(' ');
-
-    // 4. Extract Subtitles
-    const subKeywords = ['CHS', 'CHT', 'GB', 'BIG5', 'JPN', 'ENG', '简', '繁', '日', '双语', '内封', '外挂'];
-    title = title.replace(/(?:\[|【|\()([^\]】)]+)(?:\]|】|\))/g, (match, content: string) => {
-      const up = content.toUpperCase();
-      if (subKeywords.some(k => up.includes(k))) {
-        sub += ' ' + content;
-        return ' ';
-      }
-      return match;
-    });
-
-    // 5. Clean Main Title (Scoring Logic)
-    const scoreStr = (str: string): number => {
-      let s = 0; if (!str) return -999;
-      const lower = str.toLowerCase();
-      if (/[\u4e00-\u9fa5]/.test(str)) s += 15;
-      if (str.includes('/')) s += 5;
-      const len = str.length;
-      if (len >= 2) s += Math.min(len, 20) * 0.5;
-      let techCount = 0;
-      if (/(?:1080p|720p|mkv|mp4|avc|hevc|aac|opus|bdrip|web-dl|remux|fin|v\d|av1)/.test(lower)) techCount = 1;
-      if (/(?:字幕组|搬运|新番|合集|整理|发布|制作|招募|staff)/i.test(str)) s -= 20;
-      if (techCount > 0) s -= 5;
-      return s;
-    };
-
-    const blockRegex = /(?:\[[^\]]+\]|【[^】]+】|★[^★]+★|\([^\)]+\))/g;
-    const blocks = title.match(blockRegex) || [];
-    const naked = title.replace(blockRegex, ' ').trim();
-
-    let bestStr = naked;
-    let maxScore = scoreStr(naked);
-    if (naked.length < 2 && !/[\u4e00-\u9fa5]/.test(naked)) maxScore -= 10;
-
-    blocks.forEach(b => {
-      const content = b.slice(1, -1);
-      const score = scoreStr(content);
-      if (score > maxScore) { maxScore = score; bestStr = content; }
-    });
-    title = bestStr;
-
-    // Standardize & Remove noise
-    title = title.replace(/[|／_]/g, '/');
-    const techKeywords = /(?:1080p|720p|2160p|4k|web|bdrip|avc|hevc|aac|mp4|mkv|big5|chs|cht|jpn|eng|s\d+|season|fin|opus|x264|x265|10bit|tv动画|剧场版|ova|cd|others)/gi;
-    title = title.replace(techKeywords, ' ');
-    // 清理中文季/话/集/期标记，包括 "第3期", "第一季", "Season 3" 等
-    title = title.replace(/第\s*[\d一二三四五六七八九十]+\s*[话集季期部]/g, ' ');
-    title = title.replace(/Season\s*\d+/gi, ' ');
-    title = title.replace(/\s\d+-\d+/g, ' ');
-    title = title.replace(/\[\d+(?:-\d+)?\]/g, ' ');
-
-    if (title.includes('/')) {
-      const parts = title.split('/').map(p => p.trim());
-      const cnPart = parts.find(p => /[\u4e00-\u9fa5]/.test(p) && p.length > 1);
-      if (cnPart) title = cnPart; else title = parts[0];
-    }
-
-    title = title.split('：')[0];
-    const parenMatch = title.match(/^([\u4e00-\u9fa5\s\w:-]+)\s*[\(（]/);
-    if (parenMatch) title = parenMatch[1];
-
-    title = title.replace(/[\[\]【】()（）★]/g, ' ').replace(/\s+/g, ' ').trim();
-
-    return {
-      title, group: group.trim(), res: res.trim(), sub: sub.trim(), fmt: fmt.trim()
-    };
-  }
 }

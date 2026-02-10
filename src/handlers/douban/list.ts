@@ -3,6 +3,8 @@ import { UI } from '../../utils/ui';
 import { CONFIG } from '../../core/api-config';
 import { tmdbService } from '../../services/tmdb';
 import { embyService, EmbyItem } from '../../services/emby';
+import { BaseMediaHandler } from '../base-handler';
+import { removeSeasonInfo, hasSeasonInfo } from '../../utils/title-parser';
 
 interface Strategy {
   name: string;
@@ -14,16 +16,11 @@ interface Strategy {
   getCover: (card: Element) => Element | null | undefined;
 }
 
-interface LogEntry {
-  time: string;
-  step: string;
-  data: unknown;
-}
-
-export class DoubanListHandler {
+export class DoubanListHandler extends BaseMediaHandler {
   private strategies: Strategy[];
 
   constructor() {
+    super(); // 调用基类constructor
     this.strategies = [
       {
         // Scenario 1: Explore / TV (React App)
@@ -156,10 +153,9 @@ export class DoubanListHandler {
     let useYear = strategy.getYear(yearEl);
     const mediaType = strategy.getType ? strategy.getType(card) : null;
 
-    const seasonRegex = /(?:[\s:：(（\[【]|^)(?:第[0-9一二三四五六七八九十]+季|Season\s*\d+|S\d+).*/i;
-
-    if (seasonRegex.test(rawTitle)) {
-      cleanTitle = rawTitle.replace(seasonRegex, '').trim();
+    // 使用统一的标题解析工具
+    if (hasSeasonInfo(rawTitle)) {
+      cleanTitle = removeSeasonInfo(rawTitle);
       useYear = ''; // Don't filter by year
     }
 
@@ -170,73 +166,12 @@ export class DoubanListHandler {
     });
     dot.title = `Checking ${cleanTitle}...`;
 
-    const processLog: LogEntry[] = [];
-    const log = (step: string, data: unknown): void => {
-      processLog.push({ time: new Date().toLocaleTimeString(), step, data });
-    };
-
-    log('【Init】', { Title: cleanTitle, Year: useYear, Type: mediaType });
-
     try {
-      const results = await tmdbService.search(cleanTitle, useYear, mediaType);
-
-      const tmdbLog: { meta: typeof results.meta; response: unknown } = {
-        ...{ meta: results.meta },
-        response: { count: results.data.length, top_result: results.data[0] || null }
-      };
-      if (results.meta.error) tmdbLog.response = { error: results.meta.error };
-      log('【请求API: TMDB】', tmdbLog);
-
-      let found = false;
-      let embyItem: EmbyItem | null = null;
-      let tmdbId: number | null = null;
-
-      if (results.data.length > 0) {
-        const bestMatch = results.data[0];
-        tmdbId = bestMatch.id;
-        const embyResult = await embyService.checkExistence(bestMatch.id);
-        embyItem = embyResult.data;
-
-        const embyLog: { meta: typeof embyResult.meta; response: unknown } = {
-          ...{ meta: embyResult.meta },
-          response: embyItem ? embyItem : 'Not Found'
-        };
-        if (embyResult.meta.error) embyLog.response = { error: embyResult.meta.error };
-        log('【请求API: Emby】', embyLog);
-
-        if (embyItem) {
-          found = true;
-          dot.className = 'us-dot found';
-          dot.title = `Found in Emby: ${embyItem.Name}`;
-          dot.onclick = (e: MouseEvent): void => {
-            e.preventDefault(); e.stopPropagation();
-            UI.showDetailModal(cleanTitle, processLog, embyItem, [cleanTitle], (tmdbId && mediaType) ? { id: tmdbId, mediaType } : undefined);
-          };
-        }
-      } else {
-        log('【请求API: Emby】', { message: 'Skipped (No TMDB Result)' });
-      }
-
-      if (!found) {
-        dot.className = 'us-dot not-found';
-        dot.title = 'Not found in Emby';
-        dot.onclick = (e: MouseEvent): void => {
-          e.preventDefault(); e.stopPropagation();
-          UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle], (tmdbId && mediaType) ? { id: tmdbId, mediaType } : undefined);
-        };
-      }
-
-      dot.classList.remove('loading');
-
+      // 使用基类的通用媒体检查流程
+      const result = await this.checkMedia(cleanTitle, useYear, mediaType, rawTitle);
+      this.updateDotStatus(dot, result, cleanTitle, [cleanTitle]);
     } catch (e) {
-      console.error(e);
-      dot.className = 'us-dot error';
-      log('Error', String(e));
-      dot.classList.remove('loading');
-      dot.onclick = (e: MouseEvent): void => {
-        e.preventDefault(); e.stopPropagation();
-        UI.showDetailModal(cleanTitle, processLog, null, [cleanTitle]);
-      };
+      this.handleError(dot, e, cleanTitle, this.logger);
     }
   }
 }

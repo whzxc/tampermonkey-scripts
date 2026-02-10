@@ -4,17 +4,13 @@ import { CONFIG } from '../../core/api-config';
 import { tmdbService } from '../../services/tmdb';
 import { embyService, EmbyItem } from '../../services/emby';
 import { imdbService } from '../../services/imdb';
+import { BaseMediaHandler } from '../base-handler';
 
-interface LogEntry {
-  time: string;
-  step: string;
-  data: unknown;
-}
-
-export class DoubanSubjectHandler {
+export class DoubanSubjectHandler extends BaseMediaHandler {
   private doubanId: string | undefined;
 
   constructor() {
+    super(); // 调用基类constructor
     this.doubanId = location.href.match(/subject\/(\d+)/)?.[1];
   }
 
@@ -49,73 +45,12 @@ export class DoubanSubjectHandler {
     dot.style.zIndex = '10';
     dot.title = `Checking ${title}...`;
 
-    const processLog: LogEntry[] = [];
-    const log = (step: string, data: unknown): void => {
-      processLog.push({ time: new Date().toLocaleTimeString(), step, data });
-    };
-
-    log('【Init】', { Title: title, Year: year });
-
     try {
-      const results = await tmdbService.search(title, year);
-
-      const tmdbLog: { meta: typeof results.meta; response: unknown } = {
-        ...{ meta: results.meta },
-        response: { count: results.data.length, top_result: results.data[0] || null }
-      };
-      if (results.meta.error) tmdbLog.response = { error: results.meta.error };
-      log('【请求API: TMDB】', tmdbLog);
-
-      let found = false;
-      let embyItem: EmbyItem | null = null;
-      let tmdbId: number | null = null;
-
-      if (results.data.length > 0) {
-        const bestMatch = results.data[0];
-        tmdbId = bestMatch.id;
-        const embyResult = await embyService.checkExistence(bestMatch.id);
-        embyItem = embyResult.data;
-
-        const embyLog: { meta: typeof embyResult.meta; response: unknown } = {
-          ...{ meta: embyResult.meta },
-          response: embyItem ? embyItem : 'Not Found'
-        };
-        if (embyResult.meta.error) embyLog.response = { error: embyResult.meta.error };
-        log('【请求API: Emby】', embyLog);
-
-        if (embyItem) {
-          found = true;
-          dot.className = 'us-dot found';
-          dot.title = `Found in Emby: ${embyItem.Name}`;
-          dot.onclick = (e: MouseEvent): void => {
-            e.preventDefault(); e.stopPropagation();
-            UI.showDetailModal(title, processLog, embyItem, [title], tmdbId ? { id: tmdbId, mediaType: 'movie' } : undefined);
-          };
-        }
-      } else {
-        log('【请求API: Emby】', { message: 'Skipped (No TMDB Result)' });
-      }
-
-      if (!found) {
-        dot.className = 'us-dot not-found';
-        dot.title = 'Not found in Emby';
-        dot.onclick = (e: MouseEvent): void => {
-          e.preventDefault(); e.stopPropagation();
-          UI.showDetailModal(title, processLog, null, [title], tmdbId ? { id: tmdbId, mediaType: 'movie' } : undefined);
-        };
-      }
-
-      dot.classList.remove('loading');
-
+      // 使用基类的通用媒体检查流程
+      const result = await this.checkMedia(title, year, null, title);
+      this.updateDotStatus(dot, result, title, [title]);
     } catch (e) {
-      console.error(e);
-      dot.className = 'us-dot error';
-      log('Error', String(e));
-      dot.classList.remove('loading');
-      dot.onclick = (e: MouseEvent): void => {
-        e.preventDefault(); e.stopPropagation();
-        UI.showDetailModal(title, processLog, null, [title]);
-      };
+      this.handleError(dot, e, title, this.logger);
     }
   }
 
