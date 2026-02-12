@@ -53,7 +53,7 @@ class ConfigManager {
         appId: GM_getValue('nullbr_app_id', process.env.NULLBR_APP_ID || ''),
         apiKey: GM_getValue('nullbr_api_key', process.env.NULLBR_API_KEY || ''),
         cacheTTL: 10080,
-        userAgent: `tampermonkey_emby_enhance/${pkg.version}`,
+        userAgent: `emby-launchpad/${pkg.version}`,
         enable115: GM_getValue('nullbr_enable_115', true),
         enableMagnet: GM_getValue('nullbr_enable_magnet', false),
       },
