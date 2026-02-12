@@ -1,12 +1,14 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import monkey from 'vite-plugin-monkey';
-import pkg from './package.json'
+import pkg from './package.json';
 
 export default defineConfig({
   plugins: [
     vue({
-      customElement: /\.ce\.vue$/,
+      features: {
+        customElement: /\.ce\.vue$/,
+      },
     }),
     {
       name: 'inject-env-vars',
@@ -15,23 +17,23 @@ export default defineConfig({
           define: {
             'process.env.NULLBR_APP_ID': JSON.stringify(process.env.NULLBR_APP_ID),
             'process.env.NULLBR_API_KEY': JSON.stringify(process.env.NULLBR_API_KEY),
-          }
-        }
-      }
+          },
+        };
+      },
     },
     monkey({
       entry: 'src/main.ts',  // 暂时保持.js,稍后迁移
       userscript: {
-        name: 'Emby&豆瓣影视检索增强',
+        name: 'Emby Launchpad - Emby 媒体库助手',
         namespace: 'http://tampermonkey.net/',
         version: pkg.version,
-        description: '在豆瓣(Douban)和GYG网页中自动检测Emby服务端库内是否存在当前影视,支持豆瓣详情页/列表页/排行榜/收藏页,以及GYG列表页/详情页。集成TMDB/IMDb评分,提供gyg.si/bt4gprx.com快捷搜索链接。支持缓存机制减少API请求。',
+        description: '在豆瓣(Douban)、GYG、DMHY 等网站上自动检测 Emby 服务端库内是否存在当前影视。提供 Nullbr 快捷资源检索，支持搜索115网盘和磁链内容; 提供 TMDB/IMDb 评分, gyg.si/bt4gprx.com 资源搜索链接。支持 Web Components 现代化 UI。',
         author: 'leo',
         match: [
           'https://movie.douban.com/*',
           'https://m.douban.com/*',
           'https://www.gyg.si/*',
-          'https://dmhy.org/*'
+          'https://dmhy.org/*',
         ],
         connect: [
           'api.themoviedb.org',
@@ -39,7 +41,7 @@ export default defineConfig({
           'www.imdb.com',
           'www.rottentomatoes.com',
           'api.bgm.tv',
-          'api.nullbr.eu.org'
+          'api.nullbr.eu.org',
         ],
         license: 'MIT',
         grant: [
@@ -51,7 +53,7 @@ export default defineConfig({
           'GM_listValues',
           'GM_deleteValue',
           'GM_registerMenuCommand',
-          'GM_getResourceText'
+          'GM_getResourceText',
         ],
       },
       server: { mountGmApi: true },
@@ -59,7 +61,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': '/src'
-    }
-  }
+      '@': '/src',
+    },
+  },
 });

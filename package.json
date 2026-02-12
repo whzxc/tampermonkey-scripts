@@ -1,5 +1,5 @@
 {
-  "name": "tampermonkey-scripts",
+  "name": "emby-launchpad",
   "version": "1.6.0",
   "type": "module",
   "main": "unified_script.js",
@@ -12,10 +12,17 @@
     "test:coverage": "vitest --coverage",
     "type-check": "tsc --noEmit"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": [
+    "userscript",
+    "tampermonkey",
+    "emby",
+    "douban",
+    "tmdb",
+    "imdb"
+  ],
+  "author": "leo",
+  "license": "MIT",
+  "description": "Emby 媒体库助手 - 检测 Emby 媒体库,提供 TMDB/IMDb 评分及资源快捷搜索",
   "devDependencies": {
     "@types/node": "^25.2.2",
     "@types/tampermonkey": "^5.0.5",
