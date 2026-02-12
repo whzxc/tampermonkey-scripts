@@ -1,6 +1,5 @@
 import { cache, CacheManager } from '@/services/cache';
 import { requestQueue, RequestQueue } from '@/services/request-queue';
-import { log } from '@/utils/common';
 
 export interface RequestOptions<T = any> {
   requestFn: () => Promise<T>;
@@ -49,7 +48,6 @@ export abstract class ApiClient {
     if (useCache && cacheKey) {
       const cached = this.cache.get<T>(cacheKey);
       if (cached !== undefined) {
-        log(`[${this.name}] Cache hit: ${cacheKey}`);
         return {
           data: cached,
           meta: {
@@ -90,8 +88,6 @@ export abstract class ApiClient {
       };
 
     } catch (error: any) {
-      log(`[${this.name}] Request failed:`, error);
-
       if (useCache && cacheKey) {
         this.cache.set(cacheKey, null as any, 5);
       }

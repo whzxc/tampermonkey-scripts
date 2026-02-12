@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script lang="ts" setup>
 import { computed } from 'vue';
 
 export type DotStatus = 'loading' | 'found' | 'not-found' | 'error';
@@ -6,6 +6,7 @@ export type DotStatus = 'loading' | 'found' | 'not-found' | 'error';
 const props = defineProps<{
   status: DotStatus;
   title?: string;
+  size?: 'small' | 'medium' | 'large' | 'mini';
 }>();
 
 const emit = defineEmits<{
@@ -14,33 +15,54 @@ const emit = defineEmits<{
 
 const statusClass = computed(() => {
   switch (props.status) {
-    case 'loading': return 'dot-loading';
-    case 'found': return 'found';
-    case 'not-found': return 'not-found';
-    case 'error': return 'error';
-    default: return 'dot-loading';
+    case 'loading':
+      return 'dot-loading';
+    case 'found':
+      return 'found';
+    case 'not-found':
+      return 'not-found';
+    case 'error':
+      return 'error';
+    default:
+      return 'dot-loading';
   }
 });
 
 const dotTitle = computed(() => {
   if (props.title) return props.title;
   switch (props.status) {
-    case 'loading': return 'Checking...';
-    case 'found': return 'Found in Emby';
-    case 'not-found': return 'Not found';
-    case 'error': return 'Error';
-    default: return '';
+    case 'loading':
+      return 'Checking...';
+    case 'found':
+      return 'Found in Emby';
+    case 'not-found':
+      return 'Not found';
+    case 'error':
+      return 'Error';
+    default:
+      return '';
   }
+});
+
+const padding = computed(() => {
+  if (props.size === 'small') return '4px';
+  if (props.size === 'large') return '8px';
+  if (props.size === 'mini') return '0';
+  return '6px';
 });
 </script>
 
 <template>
-  <div class="us-dot" :class="statusClass" :title="dotTitle" @click="emit('dotClick')" />
+  <div :class="statusClass" :title="dotTitle" class="us-dot" @click="emit('dotClick')" />
 </template>
 
 <style>
 :host {
-  display: inline-block;
+  width: 100%;
+  height: 100%;
+  display: block;
+  padding: v-bind(padding);
+  box-sizing: border-box;
 }
 
 .us-dot {

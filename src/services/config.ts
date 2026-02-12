@@ -1,10 +1,13 @@
 import { reactive } from 'vue';
+import pkg from '../../package.json';
 
 export interface ServiceConfig {
   apiKey?: string;
   baseUrl?: string;
   server?: string;
   cacheTTL?: number;
+  userAgent?: string;
+
   [key: string]: any;
 }
 
@@ -14,17 +17,14 @@ export interface UserConfig {
   bangumi: ServiceConfig;
   imdb: ServiceConfig;
   nullbr: ServiceConfig;
-  state: {
-    dotPosition: 'auto' | 'poster_tl' | 'poster_tr' | 'poster_bl' | 'poster_br' | 'title_left' | 'title_right';
-  };
+  state: Record<string, never>;
 }
 
 type ConfigListener = (service: string, config: ServiceConfig) => void;
 
 class ConfigManager {
-  private listeners: ConfigListener[] = [];
-
   readonly config: UserConfig;
+  private listeners: ConfigListener[] = [];
 
   constructor() {
     this.config = reactive<UserConfig>({
@@ -53,10 +53,11 @@ class ConfigManager {
         appId: GM_getValue('nullbr_app_id', process.env.NULLBR_APP_ID || ''),
         apiKey: GM_getValue('nullbr_api_key', process.env.NULLBR_API_KEY || ''),
         cacheTTL: 10080,
+        userAgent: `tampermonkey_emby_enhance/${pkg.version}`,
+        enable115: GM_getValue('nullbr_enable_115', true),
+        enableMagnet: GM_getValue('nullbr_enable_magnet', false),
       },
-      state: {
-        dotPosition: GM_getValue('us_dot_position', 'auto'),
-      },
+      state: {},
     });
   }
 
@@ -74,8 +75,8 @@ class ConfigManager {
     } else if (service === 'nullbr') {
       if (updates.appId !== undefined) GM_setValue('nullbr_app_id', updates.appId);
       if (updates.apiKey !== undefined) GM_setValue('nullbr_api_key', updates.apiKey);
-    } else if (service === 'state' && 'dotPosition' in updates) {
-      GM_setValue('us_dot_position', updates.dotPosition);
+      if (updates.enable115 !== undefined) GM_setValue('nullbr_enable_115', updates.enable115);
+      if (updates.enableMagnet !== undefined) GM_setValue('nullbr_enable_magnet', updates.enableMagnet);
     }
 
     this.notifyListeners(service, config);
@@ -111,16 +112,6 @@ class ConfigManager {
     }
   }
 
-  private notifyListeners(service: string, config: ServiceConfig): void {
-    this.listeners.forEach(listener => {
-      try {
-        listener(service, config);
-      } catch (error) {
-        console.error('Config listener error:', error);
-      }
-    });
-  }
-
   getSummary(): Record<string, any> {
     return {
       tmdb: {
@@ -135,10 +126,21 @@ class ConfigManager {
       bangumi: {
         hasToken: !!this.config.bangumi.apiKey,
       },
-      state: {
-        dotPosition: this.config.state.dotPosition,
+      nullbr: {
+        enable115: !!this.config.nullbr.enable115,
+        enableMagnet: !!this.config.nullbr.enableMagnet,
       },
     };
+  }
+
+  private notifyListeners(service: string, config: ServiceConfig): void {
+    this.listeners.forEach(listener => {
+      try {
+        listener(service, config);
+      } catch (error) {
+        console.error('Config listener error:', error);
+      }
+    });
   }
 }
 

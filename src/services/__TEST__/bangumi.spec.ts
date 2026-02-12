@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { bangumiService } from '../bangumi';
-import { CONFIG } from '../../core/api-config';
+import { bangumiService } from '../api/bangumi';
+import { configService } from '../config';
 import { skipIfNoApiKey } from '../../test/api-test-helpers';
 
 describe('BangumiService', () => {
@@ -20,7 +20,7 @@ describe('BangumiService', () => {
       if (result.data) {
         expect(result.data).toHaveProperty('id');
         expect(result.data).toHaveProperty('name');
-        expect(result.data.type).toBe(2); // Anime type
+        expect(result.data.type).toBe(2);
       }
     }, 15000);
 
@@ -49,11 +49,9 @@ describe('BangumiService', () => {
       const query = '鬼灭之刃';
 
       const result1 = await bangumiService.search(query);
-      console.log('Result 1:', result1); // Debug log
       expect(result1.meta.cached).toBeFalsy();
 
       const result2 = await bangumiService.search(query);
-      console.log('Result 2:', result2); // Debug log
       expect(result2.meta.cached).toBeTruthy();
 
       expect(result1.data).toEqual(result2.data);
@@ -62,8 +60,8 @@ describe('BangumiService', () => {
 
   describe('错误处理', () => {
     it('没有Token时应该返回错误', async () => {
-      const originalKey = CONFIG.bangumi.apiKey;
-      CONFIG.update('bangumi', { apiKey: '' });
+      const originalKey = configService.config.bangumi.apiKey;
+      configService.update('bangumi', { apiKey: '' });
 
       const result = await bangumiService.search('test');
 
@@ -71,7 +69,7 @@ describe('BangumiService', () => {
       expect(result.data).toBeNull();
 
       if (originalKey) {
-        CONFIG.update('bangumi', { apiKey: originalKey });
+        configService.update('bangumi', { apiKey: originalKey });
       }
     });
   });

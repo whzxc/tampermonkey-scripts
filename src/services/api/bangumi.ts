@@ -1,7 +1,5 @@
 import { ApiClient, ApiResponse } from './api-client';
 import { CONFIG } from '@/services/config';
-import { gmFetch } from './http';
-import { log } from '@/utils/common';
 
 export interface BangumiSubject {
   id: number;
@@ -29,7 +27,6 @@ export class BangumiService extends ApiClient {
     const apiKey = CONFIG.bangumi.apiKey;
 
     if (!apiKey) {
-      log('[Bangumi] Token not configured');
       return {
         data: null,
         meta: { error: 'Token not configured', source: this.name, timestamp: new Date().toISOString() },
@@ -41,30 +38,34 @@ export class BangumiService extends ApiClient {
 
     return this.request<BangumiSubject | null>({
       requestFn: async () => {
-        const url = `${config.baseUrl}/search/subjects`;
+        const url = `${config.baseUrl}/v0/search/subjects`;
 
-        log(`[Bangumi] Searching anime: ${query}`);
-
-        const response = await gmFetch({
+        const response = await GM.xmlHttpRequest({
           method: 'POST',
           url: url,
           responseType: 'json',
-          headers: { 'Authorization': `Bearer ${apiKey}` },
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          data: JSON.stringify({
+            keyword: query,
+            filter: { type: [2] },  // type 2 = anime
+          }),
         });
 
         if (response.status === 200) {
-          const data = JSON.parse(response.responseText);
+          const data = typeof response.response === 'string'
+            ? JSON.parse(response.response)
+            : response.response;
 
           if (data && data.data && data.data.length > 0) {
-            const subject: BangumiSubject = data.data[0];
-            log(`[Bangumi] Found: ${subject.name}`);
-            return subject;
+            return data.data[0];
           }
         } else {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
-        log('[Bangumi] No results found');
         return null;
       },
       cacheKey,

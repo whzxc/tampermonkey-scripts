@@ -1,24 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { nullbrService } from '../nullbr';
-import { CONFIG } from '../../core/api-config';
+import { nullbrService } from '../api/nullbr';
+import { configService } from '../config';
 
 describe('NullbrService', () => {
   beforeEach(() => {
-    CONFIG.update('nullbr', { appId: 'test-app-id', apiKey: 'test-api-key' });
+    configService.update('nullbr', { appId: 'test-app-id', apiKey: 'test-api-key' });
     vi.clearAllMocks();
   });
 
   describe('get115Resources', () => {
     it('应该能获取115资源', async () => {
-
       const mockResponse = {
-        '115': [
-          {
-            title: 'Test Movie',
-            size: '1GB',
-            share_link: 'http://115.com/s/...',
-          },
-        ],
+        '115': [{
+          title: 'Test Movie',
+          size: '1GB',
+          share_link: 'http://115.com/s/...',
+        }],
       };
 
       (global as any).GM_xmlhttpRequest = vi.fn((options) => {
@@ -52,13 +49,11 @@ describe('NullbrService', () => {
   describe('getMagnetResources', () => {
     it('应该能获取磁力资源', async () => {
       const mockResponse = {
-        magnet: [
-          {
-            name: 'Test Magnet',
-            size: '2GB',
-            magnet: 'magnet:?xt=urn:btih:...',
-          },
-        ],
+        magnet: [{
+          name: 'Test Magnet',
+          size: '2GB',
+          magnet: 'magnet:?xt=urn:btih:...',
+        }],
       };
 
       (global as any).GM_xmlhttpRequest = vi.fn((options) => {
@@ -78,7 +73,7 @@ describe('NullbrService', () => {
 
   describe('配置检查', () => {
     it('未配置API Key时应该返回错误', async () => {
-      CONFIG.update('nullbr', { appId: '', apiKey: '' });
+      configService.update('nullbr', { appId: '', apiKey: '' });
 
       const result = await nullbrService.get115Resources(12345, 'movie');
 

@@ -1,7 +1,5 @@
 import { ApiClient, ApiResponse } from './api-client';
 import { CONFIG } from '@/services/config';
-import { gmFetch, httpRequest } from './http';
-import { log } from '@/utils/common';
 import { MediaType } from '@/types/tmdb';
 
 export interface Nullbr115Item {
@@ -66,9 +64,7 @@ class NullbrService extends ApiClient {
 
     return this.request<Nullbr115Item[]>({
       requestFn: async () => {
-        log(`[Nullbr] Fetching 115 resources: ${mediaType}/${tmdbId}`);
-
-        const response = await gmFetch({
+        const response = await GM.xmlHttpRequest({
           method: 'GET',
           url: url,
           responseType: 'json',
@@ -113,13 +109,7 @@ class NullbrService extends ApiClient {
 
     return this.request<NullbrMagnetItem[]>({
       requestFn: async () => {
-        log(`[Nullbr] Fetching magnet resources: ${url}`);
-
-        const response = await httpRequest({
-          method: 'GET',
-          url: url,
-          headers: this.getHeaders(),
-        });
+        const response = await GM.xmlHttpRequest({ url, headers: this.getHeaders() });
 
         if (response.status === 200) {
           const data: NullbrMagnetResponse = JSON.parse(response.responseText);
@@ -138,10 +128,23 @@ class NullbrService extends ApiClient {
   }
 
   async getAllResources(tmdbId: number, mediaType: MediaType): Promise<NullbrResources> {
-    const [res115, resMagnet] = await Promise.all([
-      this.get115Resources(tmdbId, mediaType),
-      this.getMagnetResources(tmdbId, mediaType),
-    ]);
+    const enable115 = CONFIG.nullbr.enable115 !== false;
+    const enableMagnet = CONFIG.nullbr.enableMagnet === true;
+
+    if (!enable115 && !enableMagnet) {
+      return { items115: [], magnets: [], hasData: false };
+    }
+
+    const promises: [Promise<ApiResponse<Nullbr115Item[]>>, Promise<ApiResponse<NullbrMagnetItem[]>>] = [
+      enable115
+        ? this.get115Resources(tmdbId, mediaType)
+        : Promise.resolve({ data: [], meta: { source: this.name, timestamp: new Date().toISOString() } }),
+      enableMagnet
+        ? this.getMagnetResources(tmdbId, mediaType)
+        : Promise.resolve({ data: [], meta: { source: this.name, timestamp: new Date().toISOString() } }),
+    ];
+
+    const [res115, resMagnet] = await Promise.all(promises);
 
     const items115 = res115.data || [];
     const magnets = resMagnet.data || [];
@@ -164,6 +167,7 @@ class NullbrService extends ApiClient {
     return {
       'X-APP-ID': CONFIG.nullbr.appId || '',
       'X-API-KEY': CONFIG.nullbr.apiKey || '',
+      'User-Agent': CONFIG.nullbr.userAgent || '',
     };
   }
 }

@@ -17,29 +17,21 @@ const tmdbApiKey = ref('');
 const embyServer = ref('');
 const embyApiKey = ref('');
 const bangumiToken = ref('');
-const dotPosition = ref('auto');
+const nullbrEnable115 = ref(true);
+const nullbrEnableMagnet = ref(false);
 const saved = ref(false);
 
 // Cache info
 const cacheKeys = ref<string[]>([]);
 const cacheCount = computed(() => cacheKeys.value.length);
 
-const dotPositionOptions = [
-  { value: 'auto', label: '自动 / Auto' },
-  { value: 'poster_tl', label: '海报左上 / Poster Top-Left' },
-  { value: 'poster_tr', label: '海报右上 / Poster Top-Right' },
-  { value: 'poster_bl', label: '海报左下 / Poster Bottom-Left' },
-  { value: 'poster_br', label: '海报右下 / Poster Bottom-Right' },
-  { value: 'title_left', label: '标题左侧 / Title Left' },
-  { value: 'title_right', label: '标题右侧 / Title Right' },
-];
-
 onMounted(() => {
   tmdbApiKey.value = (CONFIG.tmdb.apiKey as string) || '';
   embyServer.value = (CONFIG.emby.server as string) || '';
   embyApiKey.value = (CONFIG.emby.apiKey as string) || '';
   bangumiToken.value = (CONFIG.bangumi.apiKey as string) || '';
-  dotPosition.value = (CONFIG.state.dotPosition as string) || 'auto';
+  nullbrEnable115.value = CONFIG.nullbr.enable115 !== false;
+  nullbrEnableMagnet.value = CONFIG.nullbr.enableMagnet === true;
   refreshCacheKeys();
 });
 
@@ -51,7 +43,7 @@ function saveSettings() {
   configService.update('tmdb', { apiKey: tmdbApiKey.value });
   configService.update('emby', { server: embyServer.value, apiKey: embyApiKey.value });
   configService.update('bangumi', { apiKey: bangumiToken.value });
-  configService.update('state', { dotPosition: dotPosition.value });
+  configService.update('nullbr', { enable115: nullbrEnable115.value, enableMagnet: nullbrEnableMagnet.value });
 
   saved.value = true;
   setTimeout(() => { saved.value = false; }, 2000);
@@ -101,12 +93,17 @@ function onOverlayClick(e: MouseEvent) {
         </div>
 
         <div class="us-settings-row">
-          <label class="us-settings-label">圆点位置 / Dot Position</label>
-          <select v-model="dotPosition" class="us-settings-input">
-            <option v-for="opt in dotPositionOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
+          <label class="us-settings-label">Nullbr 资源搜索 / Resource Search</label>
+          <div class="us-checkbox-group">
+            <label class="us-checkbox-label">
+              <input v-model="nullbrEnable115" type="checkbox" class="us-checkbox">
+              <span>115 网盘资源搜索</span>
+            </label>
+            <label class="us-checkbox-label">
+              <input v-model="nullbrEnableMagnet" type="checkbox" class="us-checkbox">
+              <span>磁链资源搜索</span>
+            </label>
+          </div>
         </div>
 
         <div class="us-settings-actions">
@@ -160,25 +157,39 @@ function onOverlayClick(e: MouseEvent) {
   pointer-events: auto;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 .us-settings-overlay {
-  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  background: rgba(0,0,0,0.5); z-index: 9999;
-  display: flex; justify-content: center; align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   pointer-events: auto;
 }
 
 .us-settings-modal {
-  background: white; padding: 20px; border-radius: 8px;
-  width: 400px; max-width: 90%;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .us-settings-title {
-  margin-top: 0; margin-bottom: 20px;
-  font-size: 18px; color: #333;
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 18px;
+  color: #333;
 }
 
 .us-settings-row {
@@ -186,50 +197,125 @@ function onOverlayClick(e: MouseEvent) {
 }
 
 .us-settings-label {
-  display: block; font-weight: bold;
-  margin-bottom: 5px; color: #333; font-size: 13px;
+  display: block;
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #333;
+  font-size: 13px;
 }
 
 .us-settings-input {
-  width: 100%; padding: 8px; border: 1px solid #ccc;
-  border-radius: 4px; box-sizing: border-box;
-  font-size: 13px; font-family: inherit;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 13px;
+  font-family: inherit;
 }
 
 .us-settings-input:focus {
-  outline: none; border-color: #01b4e4; box-shadow: 0 0 0 2px rgba(1, 180, 228, 0.2);
+  outline: none;
+  border-color: #01b4e4;
+  box-shadow: 0 0 0 2px rgba(1, 180, 228, 0.2);
 }
 
 .us-settings-actions {
-  display: flex; justify-content: flex-end;
-  gap: 10px; margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
 }
 
 .us-button {
-  padding: 8px 16px; border-radius: 4px;
-  cursor: pointer; border: none; font-weight: bold;
-  font-size: 13px; transition: opacity 0.2s;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+  font-weight: bold;
+  font-size: 13px;
+  transition: opacity 0.2s;
 }
-.us-button:hover { opacity: 0.85; }
-.us-button-primary { background: #01b4e4; color: white; }
-.us-button-secondary { background: #eee; color: #333; }
-.us-button-danger { background: #dc3545; color: white; }
+
+.us-button:hover {
+  opacity: 0.85;
+}
+
+.us-button-primary {
+  background: #01b4e4;
+  color: white;
+}
+
+.us-button-secondary {
+  background: #eee;
+  color: #333;
+}
+
+.us-button-danger {
+  background: #dc3545;
+  color: white;
+}
 
 .us-cache-info {
-  font-size: 14px; color: #666; margin-bottom: 12px;
-  padding: 10px; background: #f8f9fa; border-radius: 4px;
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 12px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 4px;
 }
 
 .us-cache-stats {
-  max-height: 200px; overflow-y: auto;
-  border: 1px solid #eee; border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 4px;
   margin-bottom: 12px;
 }
 
 .us-cache-stat-row {
-  padding: 6px 10px; border-bottom: 1px solid #f0f0f0; font-size: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 12px;
 }
-.us-cache-stat-row:last-child { border-bottom: none; }
-.us-cache-key { font-family: monospace; color: #555; word-break: break-all; }
-.us-cache-more { padding: 8px 10px; color: #999; font-size: 12px; text-align: center; }
+
+.us-cache-stat-row:last-child {
+  border-bottom: none;
+}
+
+.us-cache-key {
+  font-family: monospace;
+  color: #555;
+  word-break: break-all;
+}
+
+.us-cache-more {
+  padding: 8px 10px;
+  color: #999;
+  font-size: 12px;
+  text-align: center;
+}
+
+.us-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.us-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  user-select: none;
+}
+
+.us-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #01b4e4;
+}
 </style>

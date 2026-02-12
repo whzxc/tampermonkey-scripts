@@ -1,5 +1,3 @@
-import { log } from '@/utils/common';
-
 interface QueueTask<T = any> {
   requestFn: () => Promise<T>;
   resolve: (value: T) => void;
@@ -35,7 +33,6 @@ export class RequestQueue {
     const { key, priority = 0 } = options;
 
     if (key && this.pendingRequests.has(key)) {
-      log(`Request deduped: ${key}`);
       return this.pendingRequests.get(key)!;
     }
 

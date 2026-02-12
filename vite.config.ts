@@ -1,9 +1,13 @@
 import { defineConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
 import monkey from 'vite-plugin-monkey';
 import pkg from './package.json'
 
 export default defineConfig({
   plugins: [
+    vue({
+      customElement: /\.ce\.vue$/,
+    }),
     {
       name: 'inject-env-vars',
       config() {

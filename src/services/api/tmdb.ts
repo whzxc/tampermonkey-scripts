@@ -1,7 +1,6 @@
 import { ApiClient, ApiResponse } from './api-client';
 import { CONFIG } from '@/services/config';
-import { gmFetch } from './http';
-import { MediaType, MovieDetails, TvShowDetails, Movie, TV } from '@/types/tmdb';
+import { MediaType, Movie, MovieDetails, TV, TvShowDetails } from '@/types/tmdb';
 
 export class TmdbService extends ApiClient {
   constructor() {
@@ -37,7 +36,7 @@ export class TmdbService extends ApiClient {
 
         const url = `${config.baseUrl}/search/movie?${params.toString()}`;
 
-        const response = await gmFetch({ url, responseType: 'json' });
+        const response = await GM.xmlHttpRequest({ url, responseType: 'json' });
         const data = response.response;
 
         let results: Movie[] = [];
@@ -85,7 +84,7 @@ export class TmdbService extends ApiClient {
 
         const url = `${config.baseUrl}/search/tv?${params.toString()}`;
 
-        const response = await gmFetch({ url, responseType: 'json' });
+        const response = await GM.xmlHttpRequest({ url, responseType: 'json' });
         const data = response.response;
 
         return data.results || [];
@@ -104,6 +103,13 @@ export class TmdbService extends ApiClient {
 
   async getTvDetails(id: number): Promise<ApiResponse<TvShowDetails>> {
     return this.getDetailsBase<TvShowDetails>(id, 'tv');
+  }
+
+  protected determineTTL(data: any, defaultTTL: number): number {
+    if (Array.isArray(data)) {
+      return data.length > 0 ? defaultTTL : 60;
+    }
+    return defaultTTL;
   }
 
   private async getDetailsBase<T>(
@@ -129,7 +135,7 @@ export class TmdbService extends ApiClient {
 
         const url = `${config.baseUrl}/${type}/${id}?${params.toString()}`;
 
-        const response = await gmFetch({ url, responseType: 'json' });
+        const response = await GM.xmlHttpRequest({ url, responseType: 'json' });
         return response.response;
       },
       cacheKey,
@@ -137,13 +143,6 @@ export class TmdbService extends ApiClient {
       useCache: true,
       useQueue: true,
     });
-  }
-
-  protected determineTTL(data: any, defaultTTL: number): number {
-    if (Array.isArray(data)) {
-      return data.length > 0 ? defaultTTL : 60;
-    }
-    return defaultTTL;
   }
 }
 
