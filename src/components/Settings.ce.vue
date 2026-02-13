@@ -23,7 +23,23 @@ const saved = ref(false);
 
 // Cache info
 const cacheKeys = ref<string[]>([]);
-const cacheCount = computed(() => cacheKeys.value.length);
+const selectedCategory = ref<string | null>(null);
+
+const cacheStats = computed(() => {
+  const keys = cacheKeys.value;
+  return {
+    emby: keys.filter(k => k.startsWith('emby_')).length,
+    tmdb: keys.filter(k => k.startsWith('tmdb_')).length,
+    bangumi: keys.filter(k => k.startsWith('bangumi_')).length,
+    nullbr: keys.filter(k => k.startsWith('nullbr_')).length,
+    total: keys.length
+  };
+});
+
+const selectedCategoryKeys = computed(() => {
+  if (!selectedCategory.value) return [];
+  return cacheKeys.value.filter(k => k.startsWith(`${selectedCategory.value}_`));
+});
 
 onMounted(() => {
   tmdbApiKey.value = (CONFIG.tmdb.apiKey as string) || '';
@@ -58,10 +74,28 @@ function clearCache(filter?: string) {
   refreshCacheKeys();
 }
 
+function selectCategory(category: string) {
+  selectedCategory.value = category;
+}
+
+function backToCacheList() {
+  selectedCategory.value = null;
+}
+
 function onOverlayClick(e: MouseEvent) {
   if ((e.target as HTMLElement).classList.contains('us-settings-overlay')) {
     emit('close');
   }
+}
+
+function getCategoryName(key: string): string {
+  const map: Record<string, string> = {
+    emby: 'Emby',
+    tmdb: 'TMDB',
+    bangumi: 'Bangumi',
+    nullbr: 'Nullbr'
+  };
+  return map[key] || key;
 }
 </script>
 
@@ -116,27 +150,75 @@ function onOverlayClick(e: MouseEvent) {
 
       <!-- Cache Mode -->
       <template v-else>
-        <h3 class="us-settings-title">缓存管理 / Cache</h3>
+        <!-- Cache Summary List -->
+        <template v-if="!selectedCategory">
+          <h3 class="us-settings-title">缓存管理 / Cache</h3>
 
-        <div class="us-cache-info">
-          <span>当前缓存数量: {{ cacheCount }}</span>
-        </div>
-
-        <div class="us-cache-stats" v-if="cacheCount > 0">
-          <div class="us-cache-stat-row" v-for="key in cacheKeys.slice(0, 20)" :key="key">
-            <span class="us-cache-key">{{ key }}</span>
+          <div class="us-cache-info">
+            <span>总缓存数量: {{ cacheStats.total }}</span>
           </div>
-          <div v-if="cacheKeys.length > 20" class="us-cache-more">
-            ... and {{ cacheKeys.length - 20 }} more
-          </div>
-        </div>
 
-        <div class="us-settings-actions">
-          <button class="us-button us-button-secondary" @click="emit('close')">关闭 / Close</button>
-          <button class="us-button us-button-danger" @click="clearCache('tmdb')">清除 TMDB</button>
-          <button class="us-button us-button-danger" @click="clearCache('emby')">清除 Emby</button>
-          <button class="us-button us-button-danger" @click="clearCache()">清除全部</button>
-        </div>
+          <div class="us-cache-list">
+            <div class="us-cache-item us-clickable" @click="selectCategory('emby')">
+              <div class="us-cache-label">
+                <span class="us-cache-name">Emby</span>
+                <span class="us-cache-count">{{ cacheStats.emby }} items</span>
+              </div>
+              <button class="us-button us-button-sm us-button-danger" @click.stop="clearCache('emby')">清除</button>
+            </div>
+
+            <div class="us-cache-item us-clickable" @click="selectCategory('tmdb')">
+              <div class="us-cache-label">
+                <span class="us-cache-name">TMDB</span>
+                <span class="us-cache-count">{{ cacheStats.tmdb }} items</span>
+              </div>
+              <button class="us-button us-button-sm us-button-danger" @click.stop="clearCache('tmdb')">清除</button>
+            </div>
+
+            <div class="us-cache-item us-clickable" @click="selectCategory('bangumi')">
+              <div class="us-cache-label">
+                <span class="us-cache-name">Bangumi</span>
+                <span class="us-cache-count">{{ cacheStats.bangumi }} items</span>
+              </div>
+              <button class="us-button us-button-sm us-button-danger" @click.stop="clearCache('bangumi')">清除</button>
+            </div>
+
+            <div class="us-cache-item us-clickable" @click="selectCategory('nullbr')">
+              <div class="us-cache-label">
+                <span class="us-cache-name">Nullbr</span>
+                <span class="us-cache-count">{{ cacheStats.nullbr }} items</span>
+              </div>
+              <button class="us-button us-button-sm us-button-danger" @click.stop="clearCache('nullbr')">清除</button>
+            </div>
+          </div>
+
+          <div class="us-settings-actions us-settings-actions-column">
+            <button class="us-button us-button-danger us-button-block" @click="clearCache()">清除全部 / Clear All</button>
+            <button class="us-button us-button-secondary us-button-block" @click="emit('close')">关闭 / Close</button>
+          </div>
+        </template>
+
+        <!-- Cache Detail View -->
+        <template v-else>
+          <div class="us-detail-header">
+            <button class="us-button-icon" @click="backToCacheList">←</button>
+            <h3 class="us-settings-title" style="margin: 0;">{{ getCategoryName(selectedCategory) }} Cache</h3>
+          </div>
+
+          <div class="us-cache-detail-list">
+            <div v-if="selectedCategoryKeys.length === 0" class="us-cache-empty">
+              无缓存数据 / No cache items
+            </div>
+            <div v-for="key in selectedCategoryKeys" :key="key" class="us-cache-detail-row">
+              {{ key }}
+            </div>
+          </div>
+
+          <div class="us-settings-actions">
+            <button class="us-button us-button-danger" @click="clearCache(selectedCategory!)">清除此类全部</button>
+            <button class="us-button us-button-secondary" @click="backToCacheList">返回 / Back</button>
+          </div>
+        </template>
       </template>
     </div>
   </div>
@@ -181,6 +263,9 @@ function onOverlayClick(e: MouseEvent) {
   border-radius: 8px;
   width: 400px;
   max-width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -227,6 +312,10 @@ function onOverlayClick(e: MouseEvent) {
   margin-top: 20px;
 }
 
+.us-settings-actions-column {
+  flex-direction: column;
+}
+
 .us-button {
   padding: 8px 16px;
   border-radius: 4px;
@@ -256,44 +345,121 @@ function onOverlayClick(e: MouseEvent) {
   color: white;
 }
 
+.us-button-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.us-button-block {
+  width: 100%;
+  padding: 10px;
+}
+
+.us-button-icon {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 10px 0 0;
+  color: #666;
+}
+
+.us-button-icon:hover {
+  color: #333;
+}
+
 .us-cache-info {
   font-size: 14px;
   color: #666;
-  margin-bottom: 12px;
+  margin-bottom: 15px;
   padding: 10px;
   background: #f8f9fa;
   border-radius: 4px;
+  text-align: center;
+  font-weight: bold;
 }
 
-.us-cache-stats {
-  max-height: 200px;
+.us-cache-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+  overflow-y: auto;
+}
+
+.us-cache-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  background: #fff;
+  transition: background-color 0.2s;
+}
+
+.us-cache-item.us-clickable {
+  cursor: pointer;
+}
+
+.us-cache-item.us-clickable:hover {
+  background: #f8f9fa;
+  border-color: #ddd;
+}
+
+.us-cache-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.us-cache-name {
+  font-weight: bold;
+  font-size: 14px;
+  color: #333;
+}
+
+.us-cache-count {
+  font-size: 12px;
+  color: #999;
+}
+
+.us-detail-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.us-cache-detail-list {
+  flex: 1;
   overflow-y: auto;
   border: 1px solid #eee;
   border-radius: 4px;
-  margin-bottom: 12px;
+  background: #fafafa;
+  padding: 4px;
+  min-height: 200px;
 }
 
-.us-cache-stat-row {
-  padding: 6px 10px;
-  border-bottom: 1px solid #f0f0f0;
+.us-cache-detail-row {
+  padding: 6px 8px;
   font-size: 12px;
+  font-family: monospace;
+  border-bottom: 1px solid #f0f0f0;
+  word-break: break-all;
+  color: #555;
 }
 
-.us-cache-stat-row:last-child {
+.us-cache-detail-row:last-child {
   border-bottom: none;
 }
 
-.us-cache-key {
-  font-family: monospace;
-  color: #555;
-  word-break: break-all;
-}
-
-.us-cache-more {
-  padding: 8px 10px;
-  color: #999;
-  font-size: 12px;
+.us-cache-empty {
+  padding: 20px;
   text-align: center;
+  color: #999;
+  font-size: 13px;
 }
 
 .us-checkbox-group {
