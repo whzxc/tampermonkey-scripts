@@ -58,7 +58,7 @@ const doubanConfig: SiteConfig = {
     // === Explore list page ===
     {
       name: 'explore',
-      match: () => location.pathname.startsWith('/explore'),
+      match: () => location.pathname.startsWith('/explore') || location.pathname.startsWith('/tv'),
       getItems: () => document.querySelectorAll('.subject-list-list li'),
       itemConfig: {
         getTitle: (el) => el?.querySelector('.drc-subject-info-title-text')?.textContent || '',

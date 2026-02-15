@@ -98,10 +98,10 @@ const TAG_DEFS: TagDef[] = [
 // ─── DMHY handler logic ─────────────────────────────────────────────────
 
 function processTopicList(): void {
-  const links = document.querySelectorAll('#topic_list td.title a');
+  const titles = document.querySelectorAll('#topic_list td.title');
 
-  links.forEach(link => {
-    const anchor = link as HTMLAnchorElement;
+  titles.forEach(title => {
+    const anchor = title.querySelector('a') as HTMLAnchorElement;
     // Only process links to topic views
     const href = anchor.getAttribute('href') || '';
     if (!href.includes('/topics/view/')) return;

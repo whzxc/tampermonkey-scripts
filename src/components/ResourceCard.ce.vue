@@ -78,7 +78,7 @@ loadNullbrResources();
       <div v-if="nullbrItems115.length" style="margin-bottom: 12px;">
         <div class="us-section-label">📁 115 网盘分享 ({{ nullbrItems115.length }})</div>
         <div class="us-resource-list">
-          <div v-for="item in nullbrItems115.slice(0, 5)" :key="item.share_link" class="us-resource-item">
+          <div v-for="item in nullbrItems115" :key="item.share_link" class="us-resource-item">
             <div class="us-resource-info">
               <div :title="item.title" class="us-resource-title">{{ item.title }}</div>
               <div class="us-resource-meta">
@@ -99,7 +99,7 @@ loadNullbrResources();
       <div v-if="nullbrMagnets.length">
         <div class="us-section-label">🧲 磁力链接 ({{ nullbrMagnets.length }})</div>
         <div class="us-resource-list">
-          <div v-for="item in nullbrMagnets.slice(0, 5)" :key="item.magnet" class="us-resource-item">
+          <div v-for="item in nullbrMagnets" :key="item.magnet" class="us-resource-item">
             <div class="us-resource-info">
               <div :title="item.name" class="us-resource-title">{{ item.name }}</div>
               <div class="us-resource-meta">

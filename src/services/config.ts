@@ -50,7 +50,6 @@ class ConfigManager {
       },
       nullbr: {
         baseUrl: 'https://api.nullbr.eu.org',
-        appId: GM_getValue('nullbr_app_id', process.env.NULLBR_APP_ID || ''),
         apiKey: GM_getValue('nullbr_api_key', process.env.NULLBR_API_KEY || ''),
         cacheTTL: 10080,
         userAgent: `emby-launchpad/${pkg.version}`,

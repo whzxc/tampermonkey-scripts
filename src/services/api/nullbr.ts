@@ -48,7 +48,7 @@ class NullbrService extends ApiClient {
   }
 
   isConfigured(): boolean {
-    return !!(CONFIG.nullbr.appId && CONFIG.nullbr.apiKey);
+    return !!CONFIG.nullbr.apiKey;
   }
 
   async get115Resources(tmdbId: number, mediaType: MediaType): Promise<ApiResponse<Nullbr115Item[]>> {
@@ -165,7 +165,7 @@ class NullbrService extends ApiClient {
 
   private getHeaders(): Record<string, string> {
     return {
-      'X-APP-ID': CONFIG.nullbr.appId || '',
+      'X-APP-ID': 'cGtrfHSAS',
       'X-API-KEY': CONFIG.nullbr.apiKey || '',
       'User-Agent': CONFIG.nullbr.userAgent || '',
     };

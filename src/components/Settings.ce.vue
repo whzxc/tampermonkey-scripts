@@ -1,5 +1,5 @@
-<script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+<script lang="ts" setup>
+import { computed, onMounted, ref } from 'vue';
 import { CONFIG, configService } from '@/services/config';
 import { cache } from '@/services/cache';
 
@@ -17,6 +17,7 @@ const tmdbApiKey = ref('');
 const embyServer = ref('');
 const embyApiKey = ref('');
 const bangumiToken = ref('');
+const nullbrApiKey = ref('');
 const nullbrEnable115 = ref(true);
 const nullbrEnableMagnet = ref(false);
 const saved = ref(false);
@@ -32,7 +33,7 @@ const cacheStats = computed(() => {
     tmdb: keys.filter(k => k.startsWith('tmdb_')).length,
     bangumi: keys.filter(k => k.startsWith('bangumi_')).length,
     nullbr: keys.filter(k => k.startsWith('nullbr_')).length,
-    total: keys.length
+    total: keys.length,
   };
 });
 
@@ -46,6 +47,7 @@ onMounted(() => {
   embyServer.value = (CONFIG.emby.server as string) || '';
   embyApiKey.value = (CONFIG.emby.apiKey as string) || '';
   bangumiToken.value = (CONFIG.bangumi.apiKey as string) || '';
+  nullbrApiKey.value = (CONFIG.nullbr.apiKey as string) || '';
   nullbrEnable115.value = CONFIG.nullbr.enable115 !== false;
   nullbrEnableMagnet.value = CONFIG.nullbr.enableMagnet === true;
   refreshCacheKeys();
@@ -59,10 +61,12 @@ function saveSettings() {
   configService.update('tmdb', { apiKey: tmdbApiKey.value });
   configService.update('emby', { server: embyServer.value, apiKey: embyApiKey.value });
   configService.update('bangumi', { apiKey: bangumiToken.value });
-  configService.update('nullbr', { enable115: nullbrEnable115.value, enableMagnet: nullbrEnableMagnet.value });
+  configService.update('nullbr', { apiKey: nullbrApiKey.value, enable115: nullbrEnable115.value, enableMagnet: nullbrEnableMagnet.value });
 
   saved.value = true;
-  setTimeout(() => { saved.value = false; }, 2000);
+  setTimeout(() => {
+    saved.value = false;
+  }, 2000);
 }
 
 function clearCache(filter?: string) {
@@ -93,7 +97,7 @@ function getCategoryName(key: string): string {
     emby: 'Emby',
     tmdb: 'TMDB',
     bangumi: 'Bangumi',
-    nullbr: 'Nullbr'
+    nullbr: 'Nullbr',
   };
   return map[key] || key;
 }
@@ -108,33 +112,38 @@ function getCategoryName(key: string): string {
 
         <div class="us-settings-row">
           <label class="us-settings-label">TMDB API Key</label>
-          <input v-model="tmdbApiKey" class="us-settings-input" type="text" placeholder="Enter TMDB API Key">
+          <input v-model="tmdbApiKey" class="us-settings-input" placeholder="Enter TMDB API Key" type="text">
         </div>
 
         <div class="us-settings-row">
           <label class="us-settings-label">Emby Server URL</label>
-          <input v-model="embyServer" class="us-settings-input" type="text" placeholder="http://your-emby-server:8096">
+          <input v-model="embyServer" class="us-settings-input" placeholder="http://your-emby-server:8096" type="text">
         </div>
 
         <div class="us-settings-row">
           <label class="us-settings-label">Emby API Key</label>
-          <input v-model="embyApiKey" class="us-settings-input" type="text" placeholder="Enter Emby API Key">
+          <input v-model="embyApiKey" class="us-settings-input" placeholder="Enter Emby API Key" type="text">
         </div>
 
         <div class="us-settings-row">
           <label class="us-settings-label">Bangumi Token</label>
-          <input v-model="bangumiToken" class="us-settings-input" type="text" placeholder="Enter Bangumi Token">
+          <input v-model="bangumiToken" class="us-settings-input" placeholder="Enter Bangumi Token" type="text">
+        </div>
+
+        <div class="us-settings-row">
+          <label class="us-settings-label">Nullbr API Key</label>
+          <input v-model="nullbrApiKey" class="us-settings-input" placeholder="Enter Nullbr Api Key" type="text">
         </div>
 
         <div class="us-settings-row">
           <label class="us-settings-label">Nullbr 资源搜索 / Resource Search</label>
           <div class="us-checkbox-group">
             <label class="us-checkbox-label">
-              <input v-model="nullbrEnable115" type="checkbox" class="us-checkbox">
+              <input v-model="nullbrEnable115" class="us-checkbox" type="checkbox">
               <span>115 网盘资源搜索</span>
             </label>
             <label class="us-checkbox-label">
-              <input v-model="nullbrEnableMagnet" type="checkbox" class="us-checkbox">
+              <input v-model="nullbrEnableMagnet" class="us-checkbox" type="checkbox">
               <span>磁链资源搜索</span>
             </label>
           </div>

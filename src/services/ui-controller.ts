@@ -42,6 +42,7 @@ class UIController {
     dotWrapper.appendChild(dot);
 
     cover.style.position = 'relative';
+    cover.style.display = 'block';
     cover.appendChild(dotWrapper);
     return dot;
   }
