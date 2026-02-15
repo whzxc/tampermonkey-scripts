@@ -84,7 +84,9 @@ loadNullbrResources();
               <div class="flex gap-2 mt-[3px] text-[#888] text-[11px]">
                 <span>{{ item.size }}</span>
                 <span v-if="item.resolution" class="bg-[#f0f0f0] px-[5px] py-[1px] rounded-[3px]">{{ item.resolution }}</span>
-                <span v-if="item.quality" class="bg-[#f0f0f0] px-[5px] py-[1px] rounded-[3px]">{{ item.quality }}</span>
+                <span v-if="item.quality" class="flex gap-1">
+                  <span v-for="tag in item.quality" :key="tag" class="bg-[#f0f0f0] px-[5px] py-[1px] rounded-[3px]">{{ tag }}</span>
+                </span>
                 <span v-if="item.season_list" class="bg-[#f0f0f0] px-[5px] py-[1px] rounded-[3px]">{{ item.season_list.join(', ') }}</span>
               </div>
             </div>
@@ -121,9 +123,6 @@ loadNullbrResources();
 
   <!-- Search Actions -->
   <div v-if="uniqueQueries.length" class="p-5 border-b border-[#eee] text-center">
-    <a v-if="!tmdbInfo" :href="`https://www.themoviedb.org/search?query=${encodeURIComponent(uniqueQueries[0])}`" class="block text-base font-bold mb-[15px] text-[#9e9e9e]">
-      Not Found in TMDB
-    </a>
     <div class="flex gap-[10px] flex-wrap justify-center">
       <a :href="`https://www.gyg.si/s/1---1/${encodeURIComponent(uniqueQueries[0])}`" class="inline-block px-[8px] py-[4px] rounded-[6px] no-underline text-sm font-medium cursor-pointer border-none transition-colors bg-[#eef9fd] text-[#01b4e4] border border-[#b3e5fc] hover:bg-[#e1f5fe] hover:text-[#008dba]" target="_blank">GYG</a>
       <a :href="`https://bt4gprx.com/search?orderby=size&p=1&q=${encodeURIComponent(uniqueQueries[0])}`" class="inline-block px-[8px] py-[4px] rounded-[6px] no-underline text-sm font-medium cursor-pointer border-none transition-colors bg-[#eef9fd] text-[#01b4e4] border border-[#b3e5fc] hover:bg-[#e1f5fe] hover:text-[#008dba]" target="_blank">BT4G</a>

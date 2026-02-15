@@ -58,6 +58,9 @@ class MediaService {
       // Step 1: Try Douban ID lookup if available
       if (doubanId) {
         const doubanResult = await embyService.getByDoubanId(doubanId);
+
+        console.log(doubanResult)
+
         if (doubanResult.data) {
           const item = doubanResult.data;
           return {

@@ -76,7 +76,7 @@ export class EmbyService extends ApiClient {
     const params = new URLSearchParams({
       Recursive: 'true',
       AnyProviderIdEquals: queryId,
-      Fields: 'ProviderIds,MediaSources,MediaStreams,ProductionYear,ChildCount,RecursiveItemCount,Path,IndexNumber',
+      Fields: 'ProviderIds,MediaSources,MediaStreams,ProductionYear,ChildCount,RecursiveItemCount,Path,IndexNumber,ParentId,AncestorIds',
       api_key: apiKey,
     });
 
@@ -184,7 +184,7 @@ export class EmbyService extends ApiClient {
     const params = new URLSearchParams({
       Recursive: 'true',
       AnyProviderIdEquals: queryId,
-      Fields: 'ProviderIds,MediaSources,MediaStreams,ProductionYear,ChildCount,RecursiveItemCount,Path,IndexNumber',
+      Fields: 'ProviderIds,MediaSources,MediaStreams,ProductionYear,ChildCount,RecursiveItemCount,Path,IndexNumber,ParentId,AncestorIds',
       api_key: apiKey,
     });
 
