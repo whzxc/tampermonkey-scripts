@@ -187,7 +187,7 @@ function onBangumiClick(e: Event) {
     <a 
       :href="href" 
       target="_blank" 
-      class="no-underline text-inherit hover:underline"
+      class="no-underline text-inherit"
       :title="originalTitle"
     >
       {{ titleText }}

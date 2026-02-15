@@ -21,14 +21,14 @@ export class EmbyService extends ApiClient {
       api_key: apiKey,
     });
 
-    const url = `${server}/emby/Library/VirtualFolders?${params.toString()}`;
+    const url = `${server}/emby/Users/Me/Views?${params.toString()}`;
     // No cache for library list, or short cache
     const cacheKey = this.buildCacheKey('libraries', 'list');
 
     return this.request<any[]>({
       requestFn: async () => {
         const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
-        return data || [];
+        return data.Items || [];
       },
       cacheKey,
       cacheTTL: 5, // Short cache for libraries
@@ -39,27 +39,46 @@ export class EmbyService extends ApiClient {
   }
 
   /**
-   * Helper to filter items by selected libraries.
-   * If selectedLibraries is empty, returns true (allow all).
+   * Helper to fetch items from specific libraries if selected, or global if not.
    */
-  private isAllowedLibrary(item: EmbyItem): boolean {
+  private async fetchItemsParallel(
+    baseParams: URLSearchParams,
+    server: string,
+    apiKey: string
+  ): Promise<EmbyItem[]> {
     const { selectedLibraries } = CONFIG.emby as { selectedLibraries?: string[] };
-    if (!selectedLibraries || selectedLibraries.length === 0) return true;
 
-    // Item must be in one of the selected libraries
-    // Top-level items often have "ParentId" pointing to the library/folder
-    // Deep items might need checking "AncestorIds" if available,
-    // but typically for "search" results of Movies/Series, ParentId is often the Library or a Folder within it.
-    // However, the most reliable way for Emby root libraries validation might be tricky if structure is complex.
-    // simpler approach:
-    // If we have "ParentId", check if it matches a selected library ID.
-    // But VirtualFolders endpoint returns items with "ItemId".
-    // So we match (item.ParentId === selectedLibraryId)
-    // NOTE: This assumes the search result's ParentId IS the library ID.
-    // If the item is deep in folders, we might need to check AncestorIds.
-    // The current Fields for search include 'ParentId', let's check 'AncestorIds' too.
-    return true;
-    // Implementing actual logic inside the main methods where we have context or can request Ancestors.
+    if (!selectedLibraries || selectedLibraries.length === 0) {
+      // Global search
+      const url = `${server}/emby/Items?${baseParams.toString()}`;
+      const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
+      return data.Items || [];
+    }
+
+    // Per-library search
+    const promises = selectedLibraries.map(async (libId) => {
+      const libParams = new URLSearchParams(baseParams);
+      libParams.set('ParentId', libId);
+      const url = `${server}/emby/Items?${libParams.toString()}`;
+      try {
+        const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
+        return data.Items || [];
+      } catch (e) {
+        console.error(`[Emby] Failed to fetch items for library ${libId}:`, e);
+        return [];
+      }
+    });
+
+    const results = await Promise.all(promises);
+    const allItems = results.flat();
+
+    // Deduplicate by Id
+    const seen = new Set();
+    return allItems.filter(item => {
+      if (seen.has(item.Id)) return false;
+      seen.add(item.Id);
+      return true;
+    });
   }
 
   async checkExistence(tmdbId: number): Promise<ApiResponse<EmbyItem | undefined>> {
@@ -80,27 +99,18 @@ export class EmbyService extends ApiClient {
       api_key: apiKey,
     });
 
-    const url = `${server}/emby/Items?${params.toString()}`;
+    // const url = `${server}/emby/Items?${params.toString()}`;
     const cacheKey = this.buildCacheKey('check', tmdbId);
 
     const result = await this.request<EmbyItem | undefined>({
       requestFn: async () => {
-        const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
+        // const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
+        const items = await this.fetchItemsParallel(params, server, apiKey);
 
-        if (data.Items && data.Items.length > 0) {
-          let foundItem: EmbyItem | undefined = data.Items[0];
-
-          if (selectedLibraries && selectedLibraries.length > 0) {
-            foundItem = data.Items.find((item: any) => {
-              const ancestors = item.AncestorIds || [];
-              return selectedLibraries.some(libId => libId === item.ParentId || ancestors.includes(libId));
-            });
-          }
-
-          if (foundItem) {
-            await this.enrichSeriesInfo(foundItem, server, apiKey);
-            return foundItem;
-          }
+        if (items && items.length > 0) {
+          const foundItem = items[0];
+          await this.enrichSeriesInfo(foundItem, server, apiKey);
+          return foundItem;
         }
 
         return undefined;
@@ -111,10 +121,6 @@ export class EmbyService extends ApiClient {
       useQueue: true,
       priority: 3,
     });
-
-    if (result.meta) {
-      (result.meta as any).url = url;
-    }
 
     return result;
   }
@@ -141,21 +147,17 @@ export class EmbyService extends ApiClient {
       api_key: apiKey,
     });
 
-    const url = `${server}/emby/Items?${params.toString()}`;
+    // const url = `${server}/emby/Items?${params.toString()}`;
     const cacheKey = this.buildCacheKey('search', name);
 
     return this.request<EmbyItem[]>({
       requestFn: async () => {
-        const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
+        // const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
+        // let items = data.Items || [];
+        const items = await this.fetchItemsParallel(params, server, apiKey);
 
-        let items = data.Items || [];
-
-        if (selectedLibraries && selectedLibraries.length > 0) {
-          items = items.filter((item: any) => {
-            const ancestors = item.AncestorIds || [];
-            return selectedLibraries.some(libId => libId === item.ParentId || ancestors.includes(libId));
-          });
-        }
+        // Enrich items with season/episode info (essential for strm files or incomplete metadata)
+        await Promise.all(items.map(item => this.enrichSeriesInfo(item, server, apiKey)));
 
         return items;
       },
@@ -188,27 +190,18 @@ export class EmbyService extends ApiClient {
       api_key: apiKey,
     });
 
-    const url = `${server}/emby/Items?${params.toString()}`;
+    // const url = `${server}/emby/Items?${params.toString()}`;
     const cacheKey = this.buildCacheKey('douban', doubanId);
 
     return this.request<EmbyItem | undefined>({
       requestFn: async () => {
-        const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
+        // const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
+        const items = await this.fetchItemsParallel(params, server, apiKey);
 
-        if (data.Items && data.Items.length > 0) {
-          let foundItem: EmbyItem | undefined = data.Items[0];
-
-          if (selectedLibraries && selectedLibraries.length > 0) {
-            foundItem = data.Items.find((item: any) => {
-              const ancestors = item.AncestorIds || [];
-              return selectedLibraries.some(libId => libId === item.ParentId || ancestors.includes(libId));
-            });
-          }
-
-          if (foundItem) {
-            await this.enrichSeriesInfo(foundItem, server, apiKey);
-            return foundItem;
-          }
+        if (items && items.length > 0) {
+          const foundItem = items[0];
+          await this.enrichSeriesInfo(foundItem, server, apiKey);
+          return foundItem;
         }
 
         return undefined;
@@ -240,7 +233,7 @@ export class EmbyService extends ApiClient {
       if (seasonData.Items && seasonData.Items.length > 0) {
         item.Seasons = seasonData.Items;
 
-        const totalEpisodes = item.Seasons!.reduce((acc, s) => acc + (s.RecursiveItemCount || 0), 0);
+        let totalEpisodes = item.Seasons!.reduce((acc, s) => acc + (s.RecursiveItemCount || 0), 0);
 
         if (totalEpisodes === 0) {
           const episodeParams = new URLSearchParams({
@@ -276,6 +269,11 @@ export class EmbyService extends ApiClient {
             }
           }
         }
+
+        // Recalculate totals after potential enrichment
+        totalEpisodes = item.Seasons!.reduce((acc, s) => acc + (s.RecursiveItemCount || 0), 0);
+        item.ChildCount = item.Seasons!.length;
+        item.RecursiveItemCount = totalEpisodes;
       }
     } catch (e) {
       console.log(`[Emby] Failed to fetch seasons/episodes: ${e}`);

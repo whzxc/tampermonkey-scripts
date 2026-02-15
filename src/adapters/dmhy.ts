@@ -38,11 +38,7 @@ export const dmhyConfig: SiteConfig = {
           const rawTitle = anchor.textContent?.trim() || '';
           if (!rawTitle) return;
 
-          const container = document.createElement('div');
-
           if (anchor.parentNode) {
-            anchor.parentNode.replaceChild(container, anchor);
-
             const app = createApp({
               render() {
                 return h(DmhyTitle, {
@@ -51,7 +47,7 @@ export const dmhyConfig: SiteConfig = {
                 });
               },
             });
-            app.mount(container);
+            app.mount(anchor.parentNode as Element);
           }
         });
       },

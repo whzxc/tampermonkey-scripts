@@ -215,6 +215,35 @@ function getCategoryName(key: string): string {
   return map[key] || key;
 }
 
+
+// Cache Detail
+const showCacheDetail = ref(false);
+const currentCacheKey = ref('');
+const currentCacheValue = ref('');
+
+function viewCacheContent(key: string) {
+  currentCacheKey.value = key;
+  const val = cache.get(key);
+  currentCacheValue.value = JSON.stringify(val, null, 2);
+  showCacheDetail.value = true;
+}
+
+function closeCacheDetail() {
+  showCacheDetail.value = false;
+  currentCacheKey.value = '';
+  currentCacheValue.value = '';
+}
+
+async function copyCacheValue() {
+  try {
+    await navigator.clipboard.writeText(currentCacheValue.value);
+    // Simple alert or toast could be added here, but for now just console
+    console.log('Copied to clipboard');
+  } catch (err) {
+    console.error('Failed to copy!', err);
+  }
+}
+
 function getCacheCount(cat: string): number {
   return (cacheStats.value as any)[cat] || 0;
 }
@@ -395,7 +424,9 @@ function getCacheCount(cat: string): number {
                     <div v-if="selectedCacheCategoryKeys.length === 0" class="p-2.5 text-center text-[#999]">
                       No cache items
                     </div>
-                    <div v-for="key in selectedCacheCategoryKeys" :key="key" class="p-[6px_10px] border-b border-[#eee] last:border-0 break-all">
+                    <div v-for="key in selectedCacheCategoryKeys" :key="key" 
+                         class="p-[6px_10px] border-b border-[#eee] last:border-0 break-all cursor-pointer hover:bg-[#e6f7ff] transition-colors"
+                         @click="viewCacheContent(key)">
                       {{ key }}
                     </div>
                   </div>
@@ -417,6 +448,45 @@ function getCacheCount(cat: string): number {
         </div>
       </Transition>
     </div>
+
+    <!-- Cache Detail Modal -->
+    <Transition
+      enter-active-class="transition-opacity duration-200 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition-opacity duration-150 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div v-if="showCacheDetail" class="fixed inset-0 z-[20000] flex items-center justify-center font-sans">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="closeCacheDetail"></div>
+        
+        <!-- Modal Content -->
+        <div class="relative bg-white w-[600px] max-w-[90vw] max-h-[85vh] rounded-lg shadow-2xl flex flex-col overflow-hidden animate-[fade-in-up_0.2s_ease-out]">
+            <!-- Header -->
+            <div class="px-5 py-4 border-b border-[#eee] flex justify-between items-center bg-[#fafafa]">
+              <div class="flex-1 overflow-hidden">
+                <h3 class="m-0 text-sm font-semibold text-[#333] truncate pr-4" :title="currentCacheKey">
+                  Cache Key: <span class="text-[#01b4e4] font-mono">{{ currentCacheKey }}</span>
+                </h3>
+              </div>
+              <button class="text-[#999] hover:text-[#333] cursor-pointer bg-transparent border-none text-2xl leading-none flex items-center justify-center w-8 h-8 rounded-full hover:bg-black/5" @click="closeCacheDetail">×</button>
+            </div>
+            
+            <!-- Body -->
+            <div class="flex-1 overflow-auto p-0 bg-[#282c34]">
+               <pre class="m-0 p-5 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all text-[#abb2bf]">{{ currentCacheValue }}</pre>
+            </div>
+
+            <!-- Footer -->
+            <div class="px-5 py-3 border-t border-[#eee] flex justify-end items-center gap-3 bg-white">
+               <button class="px-4 py-2 bg-[#f0f0f0] text-[#333] rounded-md text-[13px] font-medium cursor-pointer border-none hover:bg-[#e0e0e0] transition-colors" @click="copyCacheValue">Copy JSON</button>
+               <button class="px-4 py-2 bg-[#01b4e4] text-white rounded-md text-[13px] font-medium cursor-pointer border-none hover:bg-[#019ec9] transition-colors" @click="closeCacheDetail">Close</button>
+            </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
