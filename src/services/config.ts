@@ -7,6 +7,7 @@ export interface ServiceConfig {
   server?: string;
   cacheTTL?: number;
   userAgent?: string;
+  selectedLibraries?: string[];
 
   [key: string]: any;
 }
@@ -37,6 +38,7 @@ class ConfigManager {
       emby: {
         server: GM_getValue('emby_server', ''),
         apiKey: GM_getValue('emby_api_key', ''),
+        selectedLibraries: JSON.parse(GM_getValue('emby_selected_libraries', 'null')),
         cacheTTL: 60,
       },
       bangumi: {
@@ -50,7 +52,7 @@ class ConfigManager {
       },
       nullbr: {
         baseUrl: 'https://api.nullbr.eu.org',
-        apiKey: GM_getValue('nullbr_api_key', process.env.NULLBR_API_KEY || ''),
+        apiKey: GM_getValue('nullbr_api_key'),
         cacheTTL: 10080,
         userAgent: `emby-launchpad/${pkg.version}`,
         enable115: GM_getValue('nullbr_enable_115', true),
@@ -69,6 +71,7 @@ class ConfigManager {
     } else if (service === 'emby') {
       if (updates.server !== undefined) GM_setValue('emby_server', updates.server);
       if (updates.apiKey !== undefined) GM_setValue('emby_api_key', updates.apiKey);
+      if (updates.selectedLibraries !== undefined) GM_setValue('emby_selected_libraries', JSON.stringify(updates.selectedLibraries));
     } else if (service === 'bangumi' && updates.apiKey !== undefined) {
       GM_setValue('bangumi_token', updates.apiKey);
     } else if (service === 'nullbr') {

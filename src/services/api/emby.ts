@@ -7,8 +7,63 @@ export class EmbyService extends ApiClient {
     super('Emby');
   }
 
-  async checkExistence(tmdbId: number): Promise<ApiResponse<EmbyItem | undefined>> {
+  async getLibraries(): Promise<ApiResponse<any[]>> {
     const { server, apiKey } = CONFIG.emby as { server: string; apiKey: string };
+
+    if (!server || !apiKey) {
+      return {
+        data: [],
+        meta: { error: 'Emby not configured', source: this.name, timestamp: new Date().toISOString() },
+      };
+    }
+
+    const params = new URLSearchParams({
+      api_key: apiKey,
+    });
+
+    const url = `${server}/emby/Library/VirtualFolders?${params.toString()}`;
+    // No cache for library list, or short cache
+    const cacheKey = this.buildCacheKey('libraries', 'list');
+
+    return this.request<any[]>({
+      requestFn: async () => {
+        const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
+        return data || [];
+      },
+      cacheKey,
+      cacheTTL: 5, // Short cache for libraries
+      useCache: false, // Always fetch fresh to ensure settings are up to date
+      useQueue: true,
+      priority: 3,
+    });
+  }
+
+  /**
+   * Helper to filter items by selected libraries.
+   * If selectedLibraries is empty, returns true (allow all).
+   */
+  private isAllowedLibrary(item: EmbyItem): boolean {
+    const { selectedLibraries } = CONFIG.emby as { selectedLibraries?: string[] };
+    if (!selectedLibraries || selectedLibraries.length === 0) return true;
+
+    // Item must be in one of the selected libraries
+    // Top-level items often have "ParentId" pointing to the library/folder
+    // Deep items might need checking "AncestorIds" if available,
+    // but typically for "search" results of Movies/Series, ParentId is often the Library or a Folder within it.
+    // However, the most reliable way for Emby root libraries validation might be tricky if structure is complex.
+    // simpler approach:
+    // If we have "ParentId", check if it matches a selected library ID.
+    // But VirtualFolders endpoint returns items with "ItemId".
+    // So we match (item.ParentId === selectedLibraryId)
+    // NOTE: This assumes the search result's ParentId IS the library ID.
+    // If the item is deep in folders, we might need to check AncestorIds.
+    // The current Fields for search include 'ParentId', let's check 'AncestorIds' too.
+    return true;
+    // Implementing actual logic inside the main methods where we have context or can request Ancestors.
+  }
+
+  async checkExistence(tmdbId: number): Promise<ApiResponse<EmbyItem | undefined>> {
+    const { server, apiKey, selectedLibraries } = CONFIG.emby as { server: string; apiKey: string; selectedLibraries?: string[] };
 
     if (!server || !apiKey) {
       return {
@@ -33,9 +88,19 @@ export class EmbyService extends ApiClient {
         const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
 
         if (data.Items && data.Items.length > 0) {
-          const item: EmbyItem = data.Items[0];
-          await this.enrichSeriesInfo(item, server, apiKey);
-          return item;
+          let foundItem: EmbyItem | undefined = data.Items[0];
+
+          if (selectedLibraries && selectedLibraries.length > 0) {
+            foundItem = data.Items.find((item: any) => {
+              const ancestors = item.AncestorIds || [];
+              return selectedLibraries.some(libId => libId === item.ParentId || ancestors.includes(libId));
+            });
+          }
+
+          if (foundItem) {
+            await this.enrichSeriesInfo(foundItem, server, apiKey);
+            return foundItem;
+          }
         }
 
         return undefined;
@@ -59,7 +124,7 @@ export class EmbyService extends ApiClient {
    * Returns all matching EmbyItems (0 = not found, 1 = exact, >1 = ambiguous).
    */
   async searchByName(name: string): Promise<ApiResponse<EmbyItem[]>> {
-    const { server, apiKey } = CONFIG.emby as { server: string; apiKey: string };
+    const { server, apiKey, selectedLibraries } = CONFIG.emby as { server: string; apiKey: string; selectedLibraries?: string[] };
 
     if (!server || !apiKey) {
       return {
@@ -72,7 +137,7 @@ export class EmbyService extends ApiClient {
       Recursive: 'true',
       SearchTerm: name,
       IncludeItemTypes: 'Movie,Series',
-      Fields: 'ProviderIds,MediaSources,MediaStreams,ProductionYear,ChildCount,RecursiveItemCount,Path,IndexNumber',
+      Fields: 'ProviderIds,MediaSources,MediaStreams,ProductionYear,ChildCount,RecursiveItemCount,Path,IndexNumber,ParentId,AncestorIds',
       api_key: apiKey,
     });
 
@@ -83,7 +148,16 @@ export class EmbyService extends ApiClient {
       requestFn: async () => {
         const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
 
-        return data.Items || [];
+        let items = data.Items || [];
+
+        if (selectedLibraries && selectedLibraries.length > 0) {
+          items = items.filter((item: any) => {
+            const ancestors = item.AncestorIds || [];
+            return selectedLibraries.some(libId => libId === item.ParentId || ancestors.includes(libId));
+          });
+        }
+
+        return items;
       },
       cacheKey,
       cacheTTL: 60,
@@ -97,7 +171,7 @@ export class EmbyService extends ApiClient {
    * Search Emby library by Douban subject ID.
    */
   async getByDoubanId(doubanId: string): Promise<ApiResponse<EmbyItem | undefined>> {
-    const { server, apiKey } = CONFIG.emby as { server: string; apiKey: string };
+    const { server, apiKey, selectedLibraries } = CONFIG.emby as { server: string; apiKey: string; selectedLibraries?: string[] };
 
     if (!server || !apiKey) {
       return {
@@ -122,9 +196,19 @@ export class EmbyService extends ApiClient {
         const data = (await GM.xmlHttpRequest({ url, responseType: 'json' })).response;
 
         if (data.Items && data.Items.length > 0) {
-          const item: EmbyItem = data.Items[0];
-          await this.enrichSeriesInfo(item, server, apiKey);
-          return item;
+          let foundItem: EmbyItem | undefined = data.Items[0];
+
+          if (selectedLibraries && selectedLibraries.length > 0) {
+            foundItem = data.Items.find((item: any) => {
+              const ancestors = item.AncestorIds || [];
+              return selectedLibraries.some(libId => libId === item.ParentId || ancestors.includes(libId));
+            });
+          }
+
+          if (foundItem) {
+            await this.enrichSeriesInfo(foundItem, server, apiKey);
+            return foundItem;
+          }
         }
 
         return undefined;

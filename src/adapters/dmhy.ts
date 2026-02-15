@@ -1,18 +1,21 @@
 import type { SiteConfig } from '@/types/adapter';
-import { parseDmhyTitle } from './dmhy-title-parser';
+import { parseDmhyTitle, type ParsedDmhyTitle } from './dmhy-title-parser';
 import { embyService } from '@/services/api/emby';
 import { bangumiService } from '@/services/api/bangumi';
 import { uiController } from '@/services/ui-controller';
+import type { MediaCheckResult } from '@/services/media-service';
 import { configService } from '@/services/config';
+import { createApp, h, reactive } from 'vue';
+import DmhyTags from '@/components/DmhyTags.vue';
 
 /**
  * DMHY adapter configuration.
  *
  * Pipeline per row:
  * 1. Parse raw title → cleaned title + tags
- * 2. Replace DOM text with cleaned title + tag badges
+ * 2. Replace DOM text with cleaned title + tag badges (via Vue component)
  * 3. Try Emby search (with name validation) → if found, mount green DOT
- * 4. Fallback: Bangumi search → extract id, mount Bangumi link badge
+ * 4. Fallback: Bangumi search → update Vue component state with Bangumi badge
  */
 export const dmhyConfig: SiteConfig = {
   name: 'DMHY',
@@ -30,30 +33,6 @@ export const dmhyConfig: SiteConfig = {
   globalStyles: `
     /* Hide original tag spans */
     table#topic_list tr td span.tag { display: none !important; }
-
-    /* Tag badges */
-    .us-dmhy-tag {
-      display: inline-block;
-      padding: 1px 6px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 500;
-      margin-left: 4px;
-      white-space: nowrap;
-      vertical-align: middle;
-      line-height: 1.6;
-    }
-    .us-dmhy-tag-group    { background: #fff8e1; color: #f57f17; }
-    .us-dmhy-tag-res      { background: #e3f2fd; color: #1565c0; }
-    .us-dmhy-tag-codec    { background: #f3e5f5; color: #6a1b9a; }
-    .us-dmhy-tag-audio    { background: #fce4ec; color: #c62828; }
-    .us-dmhy-tag-source   { background: #e8f5e9; color: #2e7d32; }
-    .us-dmhy-tag-subtitle { background: #e0f7fa; color: #00695c; }
-    .us-dmhy-tag-format   { background: #e0e0e0; color: #424242; }
-    .us-dmhy-tag-bangumi  { background: #e8f5e9; color: #2e7d32; cursor: pointer; text-decoration: none; }
-    .us-dmhy-tag-bangumi:hover { opacity: 0.8; }
-    .us-dmhy-tag-episode  { background: #ede7f6; color: #4527a0; }
-    .us-dmhy-tag-season   { background: #fce4ec; color: #880e4f; }
 
     /* Inline DOT for DMHY (no cover images) */
     .us-dmhy-dot-wrapper {
@@ -75,33 +54,26 @@ export const dmhyConfig: SiteConfig = {
   ],
 };
 
-// ─── Tag badge definitions ──────────────────────────────────────────────
-
-interface TagDef {
-  key: string;
-  cssClass: string;
-}
-
-// Order: Season → Episode → Group → tech tags
-const TAG_DEFS: TagDef[] = [
-  { key: 'season', cssClass: 'us-dmhy-tag-season' },
-  { key: 'episode', cssClass: 'us-dmhy-tag-episode' },
-  { key: 'group', cssClass: 'us-dmhy-tag-group' },
-  { key: 'resolution', cssClass: 'us-dmhy-tag-res' },
-  { key: 'codec', cssClass: 'us-dmhy-tag-codec' },
-  { key: 'audio', cssClass: 'us-dmhy-tag-audio' },
-  { key: 'source', cssClass: 'us-dmhy-tag-source' },
-  { key: 'subtitle', cssClass: 'us-dmhy-tag-subtitle' },
-  { key: 'format', cssClass: 'us-dmhy-tag-format' },
-];
-
 // ─── DMHY handler logic ─────────────────────────────────────────────────
+
+interface TagState {
+  tags: ParsedDmhyTitle;
+  bangumiSubject: {
+    id: number;
+    name: string;
+    name_cn?: string;
+    url: string;
+  } | null;
+}
 
 function processTopicList(): void {
   const titles = document.querySelectorAll('#topic_list td.title');
 
   titles.forEach(title => {
-    const anchor = title.querySelector('a') as HTMLAnchorElement;
+    if (!['sort-2', 'sort-31'].some(e => title.previousElementSibling?.querySelector('a')?.classList.contains(e))) return;
+
+    const anchor = title.querySelector('& > a') as HTMLAnchorElement;
+
     // Only process links to topic views
     const href = anchor.getAttribute('href') || '';
     if (!href.includes('/topics/view/')) return;
@@ -117,20 +89,30 @@ function processTopicList(): void {
     anchor.textContent = parsed.title;
     anchor.title = rawTitle;
 
-    // 3. Append tag badges (after the anchor)
+    // 3. Mount Tag Component (after the anchor)
     const tagContainer = document.createElement('span');
-    tagContainer.style.whiteSpace = 'nowrap';
-
-    // All tags in defined order (Season → Episode → Group → tech tags)
-    for (const def of TAG_DEFS) {
-      const value = parsed[def.key as keyof typeof parsed];
-      if (value) {
-        tagContainer.appendChild(createTagBadge(value, def.cssClass));
-      }
-    }
-
-    // Insert tags after the anchor
     anchor.parentNode?.insertBefore(tagContainer, anchor.nextSibling);
+
+    const state = reactive<TagState>({
+      tags: parsed,
+      bangumiSubject: null,
+    });
+
+    const app = createApp({
+      render() {
+        return h(DmhyTags, {
+          tags: state.tags,
+          bangumiSubject: state.bangumiSubject,
+        });
+      },
+    });
+
+    // Add scoped styles class to container if needed, or component handles it.
+    // DmhyTags uses inline Tailwind classes, so just mounting is fine.
+    // However, we need to make sure Tailwind preflight/reset doesn't break things here.
+    // We can add .tw-reset to the container if styles are wonky.
+    tagContainer.classList.add('tw-reset', 'inline-block', 'align-middle');
+    app.mount(tagContainer);
 
     // 4. Mount inline DOT before title
     const dotWrapper = document.createElement('div');
@@ -140,15 +122,26 @@ function processTopicList(): void {
     const dot = uiController.mountDot(dotWrapper, 'mini');
 
     // 5. Run Emby → Bangumi pipeline
-    processAnimeItem(parsed.title, dot, tagContainer);
+    processAnimeItem(parsed.title, dot, state);
   });
 }
+
+
 
 async function processAnimeItem(
   title: string,
   dot: Element,
-  tagContainer: HTMLElement,
+  state: TagState,
 ): Promise<void> {
+  // Common result props
+  const baseResult = {
+    title,
+    mediaType: 'tv' as const,
+    searchQueries: [title],
+    tmdbId: null,
+    embyItem: null,
+  };
+
   try {
     // Step A: Try Emby search first (if configured)
     if (configService.validate('emby')) {
@@ -161,56 +154,63 @@ async function processAnimeItem(
       if (matchedItems.length > 0) {
         const item = matchedItems[0];
         // Found in Emby → green dot, clickable
-        dot.setAttribute('status', 'found');
-        dot.setAttribute('title', `Emby: ${item.Name}`);
 
-        // Bind InfoCard on click (only for actual Emby matches)
-        uiController.bindInfoCard(dot, {
-          tmdbId: null,
+        const result: MediaCheckResult = {
+          ...baseResult,
           embyItem: item,
           embyItems: matchedItems.length > 1 ? matchedItems : undefined,
           status: 'found',
           statusMessage: `Found: ${item.Name}`,
-          title,
-          mediaType: 'tv',
-          searchQueries: [title],
-        });
+        };
+
+        uiController.updateDot(dot, result);
+        uiController.bindInfoCard(dot, result);
 
         return; // Done — skip Bangumi
       }
     }
 
-    // Step B: Bangumi search (no InfoCard, just Bangumi link badge)
+    // Step B: Bangumi search (update Vue component state)
     if (configService.validate('bangumi')) {
       const bangumiResult = await bangumiService.search(title);
       const subject = bangumiResult.data;
 
       if (subject) {
-        // Found on Bangumi — grey dot (not in Emby), no click handler
-        dot.setAttribute('status', 'not-found');
-        dot.setAttribute('title', `BGM: ${subject.name_cn || subject.name}`);
+        // Found on Bangumi → grey dot (not in Emby), no click handler
 
-        // Bangumi ID badge (clickable link)
-        const bangumiLink = document.createElement('a');
-        bangumiLink.className = 'us-dmhy-tag us-dmhy-tag-bangumi';
-        bangumiLink.textContent = `BGM:${subject.id}`;
-        bangumiLink.href = `https://bgm.tv/subject/${subject.id}`;
-        bangumiLink.target = '_blank';
-        bangumiLink.rel = 'noopener noreferrer';
-        bangumiLink.title = subject.name_cn || subject.name;
-        bangumiLink.addEventListener('click', e => e.stopPropagation());
-        tagContainer.appendChild(bangumiLink);
+        // Update Vue state to show Bangumi badge
+        state.bangumiSubject = {
+          id: subject.id,
+          name: subject.name,
+          name_cn: subject.name_cn,
+          url: `https://bgm.tv/subject/${subject.id}`,
+        };
+
+        const result: MediaCheckResult = {
+          ...baseResult,
+          status: 'not-found',
+          statusMessage: `BGM: ${subject.name_cn || subject.name}`,
+        };
+        uiController.updateDot(dot, result);
 
         return;
       }
     }
 
     // Neither Emby nor Bangumi returned results
-    dot.setAttribute('status', 'not-found');
-    dot.setAttribute('title', 'Not found');
-  } catch (error) {
-    dot.setAttribute('status', 'error');
-    dot.setAttribute('title', `Error: ${error}`);
+    const result: MediaCheckResult = {
+      ...baseResult,
+      status: 'not-found',
+      statusMessage: 'Not found',
+    };
+    uiController.updateDot(dot, result);
+  } catch (error: any) {
+    const result: MediaCheckResult = {
+      ...baseResult,
+      status: 'error',
+      statusMessage: `Error: ${error.message || error}`,
+    };
+    uiController.updateDot(dot, result);
   }
 }
 
@@ -252,11 +252,4 @@ function isNameMatch(searchTitle: string, embyName: string): boolean {
   }
 
   return false;
-}
-
-function createTagBadge(text: string, cssClass: string): HTMLSpanElement {
-  const span = document.createElement('span');
-  span.className = `us-dmhy-tag ${cssClass}`;
-  span.textContent = text;
-  return span;
 }

@@ -91,199 +91,52 @@ const subtitleInfo = computed(() => {
 </script>
 
 <template>
-  <div class="us-emby-section">
+  <div class="p-5 border-b border-[#eee] bg-[#fdfdfd]">
     <!-- Emby switcher (for multi-result) -->
-    <div v-if="items && items.length > 1" class="us-emby-switcher">
-      <select :value="selectedIndex" class="us-emby-select" @change="selectedIndex = Number(($event.target as HTMLSelectElement).value)">
+    <div v-if="items && items.length > 1" class="mb-3">
+      <select :value="selectedIndex" class="w-full px-[10px] py-[6px] border border-[#ccc] rounded-[6px] text-[13px] text-[#333] bg-white cursor-pointer" @change="selectedIndex = Number(($event.target as HTMLSelectElement).value)">
         <option v-for="(it, idx) in items" :key="it.Id" :value="idx">
           {{ it.Name }} ({{ it.ProductionYear || '' }}) - {{ it.Type }}
         </option>
       </select>
     </div>
 
-    <div class="us-emby-detail-row">
-      <div class="us-emby-poster">
-        <img :src="imgUrl" @error="($event.target as HTMLImageElement).style.display = 'none'">
+    <div class="flex">
+      <div class="shrink-0 w-[100px] mr-5">
+        <img :src="imgUrl" class="w-full rounded-[6px] shadow-[0_2px_8px_rgba(0,0,0,0.1)]" @error="($event.target as HTMLImageElement).style.display = 'none'">
       </div>
-      <div class="us-emby-info">
-        <div class="us-emby-name">
-          {{ current.Name }} <span class="us-emby-year">({{ year }})</span>
+      <div class="flex-1">
+        <div class="text-lg font-bold text-[#333] mb-1">
+          {{ current.Name }} <span class="font-normal text-[#999] text-sm">({{ year }})</span>
         </div>
-        <div class="us-emby-tags">
-          <span class="us-emby-type-badge">{{ current.Type }}</span>
-          <span v-if="rating" class="us-emby-rating">★ {{ rating }}</span>
+        <div class="text-[13px] text-[#666] mb-2">
+          <span class="bg-[#eee] px-[6px] py-[2px] rounded-[4px] mr-[6px]">{{ current.Type }}</span>
+          <span v-if="rating" class="text-[#f5c518] font-bold">★ {{ rating }}</span>
         </div>
 
         <!-- Series seasons -->
-        <div v-if="current.Type === 'Series' && current.Seasons?.length" class="us-season-badges">
-          <span v-for="s in current.Seasons" :key="s.Id" class="us-season-badge">
+        <div v-if="current.Type === 'Series' && current.Seasons?.length" class="mt-[6px] flex flex-wrap gap-1">
+          <span v-for="s in current.Seasons" :key="s.Id" class="bg-[#e8f5e9] text-[#2e7d32] px-[6px] py-[2px] rounded-[4px] text-[11px] border border-[#c8e6c9]">
             {{ s.Name.replace('Season', 'S').replace('Specials', 'SP') }}: {{ s.ChildCount || s.RecursiveItemCount || 0 }}集
           </span>
         </div>
-        <div v-else-if="current.Type === 'Series'" class="us-series-count">
+        <div v-else-if="current.Type === 'Series'" class="mt-[5px] text-[#52B54B] font-bold">
           {{ current.ChildCount || 0 }} Seasons / {{ current.RecursiveItemCount || 0 }} Episodes
         </div>
 
-        <div class="us-emby-path">
-          <strong>Path:</strong> <span class="us-path-value">{{ path }}</span>
+        <div class="text-xs text-[#555] mt-2 leading-[1.4]">
+          <strong>Path:</strong> <span class="font-mono bg-[#f1f1f1] px-[4px] py-[2px] rounded-[3px] break-all">{{ path }}</span>
         </div>
-        <div v-if="techInfo.length" class="us-tech-info">{{ techInfo.join(' • ') }}</div>
-        <div v-if="audioInfo" class="us-stream-info">{{ audioInfo }}</div>
-        <div v-if="subtitleInfo" class="us-stream-info">{{ subtitleInfo }}</div>
+        <div v-if="techInfo.length" class="text-xs text-[#999] mt-[6px]">{{ techInfo.join(' • ') }}</div>
+        <div v-if="audioInfo" class="text-[11px] text-[#777] mt-[6px] leading-[1.4]">{{ audioInfo }}</div>
+        <div v-if="subtitleInfo" class="text-[11px] text-[#777] mt-[6px] leading-[1.4]">{{ subtitleInfo }}</div>
 
-        <div class="us-emby-action">
-          <a :href="webUrl" class="us-btn us-btn-primary" target="_blank">▶ Play on Emby</a>
+        <div class="mt-3">
+          <a :href="webUrl" class="inline-block px-[8px] py-[4px] rounded-[6px] no-underline text-sm font-medium cursor-pointer border-none transition-colors bg-[#52B54B] text-white hover:bg-[#43943d]" target="_blank">▶ Play on Emby</a>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<style>
-.us-emby-section {
-  padding: 20px;
-  border-bottom: 1px solid #eee;
-  background: #fdfdfd;
-}
 
-.us-emby-switcher {
-  margin-bottom: 12px;
-}
-
-.us-emby-select {
-  width: 100%;
-  padding: 6px 10px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #333;
-  background: white;
-  cursor: pointer;
-}
-
-.us-emby-detail-row {
-  display: flex;
-}
-
-.us-emby-poster {
-  flex-shrink: 0;
-  width: 100px;
-  margin-right: 20px;
-}
-
-.us-emby-poster img {
-  width: 100%;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.us-emby-info {
-  flex: 1;
-}
-
-.us-emby-name {
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 4px;
-}
-
-.us-emby-year {
-  font-weight: normal;
-  color: #999;
-  font-size: 14px;
-}
-
-.us-emby-tags {
-  font-size: 13px;
-  color: #666;
-  margin-bottom: 8px;
-}
-
-.us-emby-type-badge {
-  background: #eee;
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-right: 6px;
-}
-
-.us-emby-rating {
-  color: #f5c518;
-  font-weight: bold;
-}
-
-.us-season-badges {
-  margin-top: 6px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.us-season-badge {
-  background: #e8f5e9;
-  color: #2e7d32;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  border: 1px solid #c8e6c9;
-}
-
-.us-series-count {
-  margin-top: 5px;
-  color: #52B54B;
-  font-weight: bold;
-}
-
-.us-emby-path {
-  font-size: 12px;
-  color: #555;
-  margin-top: 8px;
-  line-height: 1.4;
-}
-
-.us-path-value {
-  font-family: monospace;
-  background: #f1f1f1;
-  padding: 2px 4px;
-  border-radius: 3px;
-  word-break: break-all;
-}
-
-.us-tech-info {
-  font-size: 12px;
-  color: #999;
-  margin-top: 6px;
-}
-
-.us-stream-info {
-  font-size: 11px;
-  color: #777;
-  margin-top: 6px;
-  line-height: 1.4;
-}
-
-.us-emby-action {
-  margin-top: 12px;
-}
-
-.us-btn {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 6px;
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  transition: background 0.2s;
-}
-
-.us-btn-primary {
-  background: #52B54B;
-  color: white;
-}
-
-.us-btn-primary:hover {
-  background: #43943d;
-}
-</style>

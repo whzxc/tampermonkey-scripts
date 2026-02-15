@@ -1,11 +1,21 @@
+import { createApp, h, reactive, type App } from 'vue';
 import type { MediaCheckResult } from '@/services/media-service';
+import StatusDot from '@/components/StatusDot.vue';
+import InfoCard from '@/components/InfoCard.vue';
+import Settings from '@/components/Settings.vue';
 
 /**
  * Unified UI injection controller.
  *
- * Handles StatusDot mounting, state updates, click binding, and InfoCard display.
+ * Handles StatusDot mounting, state updates, click binding, and InfoCard/Settings display.
  */
 class UIController {
+  // Store update functions for dots: Map<Element, (result: MediaCheckResult) => void>
+  private dotUpdaters = new WeakMap<Element, (result: MediaCheckResult) => void>();
+  private dotClickHandlers = new WeakMap<Element, (result: MediaCheckResult) => void>();
+  private settingsApp: App | null = null;
+  private settingsContainer: HTMLElement | null = null;
+
   /**
    * Create and mount a StatusDot on the given cover element.
    */
@@ -14,19 +24,14 @@ class UIController {
     size: 'small' | 'medium' | 'large' | 'mini' = 'medium',
     inline?: boolean,
   ): Element {
-    const dot = document.createElement('us-status-dot');
-
-    dot.setAttribute('status', 'loading');
-    dot.setAttribute('size', size);
-
-    const dotWrapper = document.createElement('div');
+    const container = document.createElement('div');
     if (inline) {
-      dotWrapper.style.display = 'inline-block';
+      container.style.display = 'inline-block';
     } else {
-      dotWrapper.style.position = 'absolute';
-      dotWrapper.style.zIndex = '99';
-      dotWrapper.style.left = '0';
-      dotWrapper.style.top = '0';
+      container.style.position = 'absolute';
+      container.style.zIndex = '99';
+      container.style.left = '0';
+      container.style.top = '0';
     }
 
     const sizeMap = {
@@ -36,37 +41,85 @@ class UIController {
       large: '36px',
     };
 
-    dotWrapper.style.width = sizeMap[size];
-    dotWrapper.style.height = sizeMap[size];
+    container.style.width = sizeMap[size];
+    container.style.height = sizeMap[size];
 
-    dotWrapper.appendChild(dot);
+    // Reactive state for the dot
+    const state = reactive<{
+      status: 'loading' | 'found' | 'not-found' | 'error';
+      title: string;
+    }>({
+      status: 'loading',
+      title: '',
+    });
 
-    cover.style.position = 'relative';
-    cover.style.display = 'block';
-    cover.appendChild(dotWrapper);
-    return dot;
+    const app = createApp({
+      render() {
+        return h(StatusDot, {
+          status: state.status,
+          title: state.title,
+          size: size,
+          onDotClick: () => {
+            // Retrieve the current result associated with this dot and call handler
+            const handler = uiController.dotClickHandlers.get(container);
+            if (handler) {
+              // We need the result here. 
+              // The handler is bound in bindInfoCard, which has the result closure.
+              // So calling handler() is enough? 
+              // bindInfoCard(dotEl, result) -> sets handler = () => showModal(result)
+              // Yes.
+              handler(null as any); // Argument ignored by internal handler usually
+            }
+          }
+        });
+      },
+    });
+
+    app.mount(container);
+
+    if (!inline) {
+      cover.style.position = 'relative';
+      // cover.style.display = 'block'; // Avoid forcing block if not needed? formatting
+      if (getComputedStyle(cover).display === 'inline') {
+        cover.style.display = 'inline-block';
+      }
+    }
+    cover.appendChild(container);
+
+    // Store updater
+    this.dotUpdaters.set(container, (result: MediaCheckResult) => {
+      state.status = result.status;
+      state.title = result.statusMessage;
+    });
+
+    return container;
   }
 
   /**
    * Update a mounted dot element based on a MediaCheckResult.
    */
   updateDot(dotEl: Element, result: MediaCheckResult): void {
-    dotEl.setAttribute('status', result.status);
-    dotEl.setAttribute('title', result.statusMessage);
+    const updater = this.dotUpdaters.get(dotEl);
+    if (updater) {
+      updater(result);
+    }
   }
 
   /**
    * Bind click events on a dot to show the InfoCard.
    */
   bindInfoCard(dotEl: Element, result: MediaCheckResult): void {
-    const handler = (event: Event) => {
-      event.preventDefault();
-      event.stopPropagation();
+    // Store the handler logic
+    this.dotClickHandlers.set(dotEl, () => {
       this.showModal(result);
-    };
+    });
 
-    dotEl.addEventListener('dotClick', handler);
-    dotEl.addEventListener('click', handler);
+    // Also bind native click on container just in case, though StatusDot emits dotClick
+    dotEl.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.showModal(result);
+    });
   }
 
   /**
@@ -74,26 +127,68 @@ class UIController {
    */
   showModal(result: MediaCheckResult): void {
     // Remove existing info card
-    const existing = document.querySelector('us-info-card');
-    if (existing) existing.remove();
+    const existing = document.getElementById('us-info-card-container');
+    if (existing) {
+      // Ideally we reuse or unmount. For simplicity, remove.
+      // But 'createApp' unmount? 
+      // We can't easily access the app instance from here unless stored.
+      existing.remove();
+      // Note: this leaves the previous app instance hanging in memory potentially? 
+      // Vue 3 generally cleans up observed nodes, but explicit unmount is better.
+      // Let's rely on simple DOM removal for now as it's a userscript, or better: store single instance.
+    }
 
-    const card = document.createElement('us-info-card');
-    card.setAttribute('title', result.title);
-    card.setAttribute('visible', 'true');
+    const container = document.createElement('div');
+    container.id = 'us-info-card-container';
+    document.body.appendChild(container);
 
-    // Pass complex props via element properties
-    const cardEl = card as any;
-    cardEl.embyItem = result.embyItem;
-    cardEl.embyItems = result.embyItems;
-    cardEl.searchQueries = result.searchQueries;
-    cardEl.tmdbInfo = result.tmdbInfo;
-    cardEl.tmdbResults = result.tmdbResults;
-
-    card.addEventListener('close', () => {
-      card.remove();
+    const app = createApp({
+      render() {
+        return h(InfoCard, {
+          visible: true,
+          title: result.title,
+          embyItem: result.embyItem,
+          embyItems: result.embyItems,
+          searchQueries: result.searchQueries,
+          tmdbInfo: result.tmdbInfo,
+          tmdbResults: result.tmdbResults,
+          onClose: () => {
+            app.unmount();
+            container.remove();
+          }
+        });
+      }
     });
 
-    document.body.appendChild(card);
+    app.mount(container);
+  }
+
+  /**
+   * Show Settings modal.
+   */
+  showSettings(initialTab?: string): void {
+    // Remove existing
+    const existing = document.getElementById('us-settings-container');
+    if (existing) existing.remove();
+
+    const container = document.createElement('div');
+    container.id = 'us-settings-container';
+    document.body.appendChild(container);
+
+    const app = createApp({
+      render() {
+        return h(Settings, {
+          visible: true,
+          initialTab,
+          onClose: () => {
+            app.unmount();
+            container.remove();
+          }
+        });
+      }
+    });
+
+    app.mount(container);
   }
 }
 

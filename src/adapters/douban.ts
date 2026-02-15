@@ -51,8 +51,24 @@ const doubanConfig: SiteConfig = {
       dotSize: 'medium',
       observe: false,
       beforeMount: (cover) => {
-        cover.style.marginLeft = '0';
+        cover.classList.add('ml-0');
       },
+    },
+
+    // === Home page ===
+    {
+      name: 'home',
+      match: () => location.pathname === '/',
+      getItems: () => document.querySelectorAll('.subject-card'),
+      itemConfig: {
+        getTitle: (el) => el?.querySelector('.subject-card-item-title-text')?.textContent || '',
+        getYear: () => '',
+        getType: (card): MediaType => new URL(card.querySelector('a')?.href || '').searchParams.get('uri')?.split('/').filter(Boolean)[0] as MediaType,
+        getCover: (card) => card.querySelector('.subject-card-item-cover') as HTMLElement | null,
+        getDoubanId: (card) => new URL(card.querySelector('a')?.href || '').searchParams.get('uri')?.split('/').slice(-1)[0] || '',
+      },
+      dotSize: 'small',
+      observe: true,
     },
 
     // === Explore list page ===

@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import monkey from 'vite-plugin-monkey';
+import tailwindcss from '@tailwindcss/vite';
 import pkg from './package.json';
 
 export default defineConfig({
   plugins: [
+    tailwindcss(),
     vue({
       features: {
         customElement: /\.ce\.vue$/,
